@@ -1,23 +1,24 @@
 # Nexo Assist
 
-Agent de atendimento do service desk de TI da Nexo (desafio técnico).
+Support agent for Nexo's IT service desk (technical challenge).
 
-> Estado atual: **hello world**. Um agent Mastra com uma tool de exemplo, respondendo em streaming numa página Next.js.
+> Current state: **hello world**. A Mastra agent with one sample tool, streaming its reply on a Next.js page.
+> Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
-## Como rodar
+## How to run
 
-Pré-requisitos: Node 22 (veja `.nvmrc`) e pnpm 10.
+Requirements: Node 22 (see `.nvmrc`) and pnpm 10.
 
 ```bash
 pnpm install
-cp .env.example .env.local   # preencha ANTHROPIC_API_KEY
+cp .env.example .env.local   # fill in ANTHROPIC_API_KEY
 pnpm dev
 ```
 
-Abra http://localhost:3000 e pergunte, por exemplo, "qual o horário do service desk?".
-A linha acima da resposta mostra a tool que o agent chamou.
+Open http://localhost:3000 and ask, for example, "qual o horário do service desk?".
+The line above the reply shows the tool the agent called.
 
-## Modelo
+## Model
 
-O modelo é configurado em `NEXO_AGENT_MODEL` (formato `provider/modelo` do model router do Mastra).
-O padrão é `anthropic/claude-opus-5-5`. A escolha final e a justificativa de custo ficam para as próximas etapas.
+The model is set in `NEXO_AGENT_MODEL` (Mastra model router format, `provider/model`).
+The default is `anthropic/claude-opus-5-5`. The final choice and its cost rationale come in a later stage.
