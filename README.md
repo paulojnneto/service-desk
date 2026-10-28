@@ -2,7 +2,7 @@
 
 Support agent for Nexo's IT service desk (technical challenge).
 
-> Current state: **project skeleton** (Stage 2). The agent streams its replies in the chat, using a simulated model that needs no LLM key.
+> Current state: **sign-in and employee shell** (Stage 3). Employees sign in and chat with the agent, which uses a simulated model that needs no LLM key.
 > Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
 ## How to run
@@ -23,7 +23,14 @@ pnpm dev
 | Agent API      | http://localhost:3001/health | Backend that runs the agent    |
 | Ticket service | http://localhost:4000/health | Simulated legacy ticket system |
 
-In the chat, ask for example "qual o horário do service desk?". The line above the reply shows the tool the agent called.
+Open http://localhost:3000 and sign in with a sample email and **any password**:
+
+| Who                   | Email                     | Lands on                         |
+| --------------------- | ------------------------- | -------------------------------- |
+| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                 |
+| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst area (console later) |
+
+The other sample people are in `packages/shared/src/directory.ts`. In the chat, ask for example "qual o horário do service desk?". The line above the reply shows the tool the agent called.
 
 If your machine uses another Node version globally (for example with nvm-windows), switch before installing: `nvm use 22`.
 
@@ -57,6 +64,14 @@ apps/web (browser) ──/api──▶ apps/api ──▶ packages/agent ──�
 | `docs`            | Product PRD, and the PRD and tech spec of each stage                           |
 
 **Secrets live only in `apps/api/.env.local`.** The UI has no environment variables on purpose: Vite publishes every `VITE_*` variable to the browser.
+
+## Sign-in and sessions
+
+- `POST /api/auth/sign-in` looks the email up in the sample directory (any password works, as the challenge asks) and sets the `nexo_session` cookie: HTTP-only, `SameSite=Lax`, holding only the person's id and role, sealed (encrypted and signed) with `iron-session`. It lasts 10 hours, or 30 days with "Manter conectado".
+- The API reads the person only from that cookie, never from the request body. The chat route answers 401 without a session and 403 to analysts, and builds the agent's parameters itself: only the messages come from the client.
+- Every `POST` must be JSON, which, together with `SameSite=Lax`, protects against cross-site requests.
+- In the UI, each route asks `GET /api/auth/me` before rendering and sends each person to their own area. This only shapes the screens; the API is what protects the data.
+- `SESSION_SECRET` (32+ characters) seals the cookie. It is required in production; in development a fixed secret is used when it is missing.
 
 ## Model
 
