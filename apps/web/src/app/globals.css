@@ -1,11 +1,60 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens from the prototype (docs/prototype/nexo.pen, "variables" field).
+ * Tailwind's default palette is reset, so only prototype colors can be used.
+ * The prototype's radii (6, 8, 12 and 16 px) already match Tailwind's
+ * rounded-md, rounded-lg, rounded-xl and rounded-2xl.
+ */
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+
+  /* Used by the screens */
+  --color-paper: #ffffff;
+  --color-desk: #f6f7f9;
+  --color-ink: #1b2431;
+  --color-ink-2: #3d4656;
+  --color-ink-3: #5b6472;
+  --color-rule: #e6e8ec;
+  --color-cta: #0062c4;
+
+  --color-primary: #0285f7;
+  --color-primary-hover: #0071d6;
+  --color-primary-soft: #0285f712;
+  --color-primary-text: #0069c7;
+  --color-success: #00bd6c;
+  --color-success-soft: #00bd6c14;
+  --color-success-text: #00804a;
+  --color-warning: #f5a500;
+  --color-warning-soft: #f5a50018;
+  --color-warning-text: #946300;
+  --color-danger: #ee343b;
+  --color-danger-soft: #ee343b12;
+  --color-danger-text: #c4161d;
+  --color-violet: #a37aff;
+  --color-violet-soft: #a37aff16;
+  --color-violet-text: #6b3fe0;
+
+  /* Also in nexo.pen, but not used by any screen of the prototype */
+  --color-bg: #fcfcfc;
+  --color-surface: #ffffff;
+  --color-card: #f5f5f5;
+  --color-card-strong: #ededed;
+  --color-fg: #0b0b0b;
+  --color-muted: #636363;
+  --color-subtle: #8e8e8e;
+  --color-border: #0b0b0b14;
+  --color-border-strong: #0b0b0b24;
+}
+
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-schibsted);
+  --font-display: var(--font-newsreader);
 }
 
 body {
-  background: #ffffff;
-  color: #1b2431;
+  background: var(--color-paper);
+  color: var(--color-ink);
 }

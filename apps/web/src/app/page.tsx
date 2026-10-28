@@ -27,7 +27,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex h-dvh w-full max-w-3xl flex-col px-6 py-8">
-      <h1 className="text-lg font-bold text-[#1B2431]">Nexo Assist · hello world</h1>
+      <h1 className="text-lg font-bold text-ink">Nexo Assist · hello world</h1>
 
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto py-8">
         {messages.map((message) =>
@@ -38,12 +38,12 @@ export default function Home() {
           ),
         )}
         {status === "submitted" && (
-          <p className="flex items-center gap-2 text-sm text-[#5B6472]">
+          <p className="flex items-center gap-2 text-sm text-ink-3">
             <LoaderCircle className="size-4 animate-spin" /> Nexo Assist está pensando…
           </p>
         )}
         {error && (
-          <p role="alert" className="rounded-lg bg-[#EE343B12] px-4 py-3 text-sm text-[#C4161D]">
+          <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger-text">
             Não consegui responder agora. Tente novamente em instantes.
           </p>
         )}
@@ -51,7 +51,7 @@ export default function Home() {
 
       <form
         onSubmit={handleSubmit}
-        className="flex items-center gap-2 rounded-xl border border-[#E6E8EC] bg-white p-2"
+        className="flex items-center gap-2 rounded-xl border border-rule bg-paper p-2"
       >
         <input
           value={input}
@@ -62,7 +62,7 @@ export default function Home() {
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="flex items-center gap-1.5 rounded-md bg-[#0062C4] px-3 py-2 text-[13.5px] font-semibold text-white disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md bg-cta px-3 py-2 text-[13.5px] font-semibold text-white disabled:opacity-50"
         >
           <ArrowUp className="size-3.5" /> Enviar
         </button>
@@ -75,7 +75,7 @@ function UserMessage({ message }: { message: UIMessage }) {
   const text = message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
   return (
     <div className="flex justify-end">
-      <p className="max-w-[520px] rounded-xl rounded-br-sm bg-[#1B2431] px-4 py-3 text-[14.5px] text-white">
+      <p className="max-w-[520px] rounded-xl rounded-br-sm bg-ink px-4 py-3 text-[14.5px] text-white">
         {text}
       </p>
     </div>
@@ -90,12 +90,12 @@ function AgentMessage({ message }: { message: UIMessage }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
-        <span className="font-semibold text-[#1B2431]">Nexo Assist</span>
+        <span className="font-semibold text-ink">Nexo Assist</span>
         {tools.map((part) => {
           const name = getToolName(part);
           const done = part.state === "output-available";
           return (
-            <span key={part.toolCallId} className="flex items-center gap-1 text-[#5B6472]">
+            <span key={part.toolCallId} className="flex items-center gap-1 text-ink-3">
               {done ? (
                 <Check className="size-3" />
               ) : (
@@ -107,7 +107,7 @@ function AgentMessage({ message }: { message: UIMessage }) {
         })}
       </div>
       {text && (
-        <p className="max-w-[600px] whitespace-pre-wrap rounded-xl rounded-tl-sm border border-[#E6E8EC] bg-white px-4 py-3 text-[14.5px] text-[#1B2431]">
+        <p className="max-w-[600px] whitespace-pre-wrap rounded-xl rounded-tl-sm border border-rule bg-paper px-4 py-3 text-[14.5px] text-ink">
           {text}
         </p>
       )}
