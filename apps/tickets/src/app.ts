@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import type { CryptoKey } from "jose";
 import type { Db } from "./db/connect";
 import type { TicketsEnv } from "./env-types";
+import { idempotency } from "./middleware/idempotency";
 import { serviceToken } from "./middleware/service-token";
+import { ticketRoutes } from "./routes/tickets";
 
 export type AppOptions = {
   db: Db;
@@ -25,6 +27,8 @@ export function createApp({ db, tokenPublicKey, now = () => new Date() }: AppOpt
     await next();
   });
   api.use(serviceToken(tokenPublicKey));
+  api.use(idempotency);
+  api.route("/tickets", ticketRoutes);
 
   app.route("/", api);
   return app;
