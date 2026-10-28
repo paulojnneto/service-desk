@@ -2,18 +2,23 @@
 
 Support agent for Nexo's IT service desk (technical challenge).
 
-> Current state: **sign-in and employee shell** (Stage 3). Employees sign in and chat with the agent, which uses a simulated model that needs no LLM key.
+> Current state: **domain and ticket service** (Stage 4). Employees sign in and chat with the agent (simulated model, no LLM key needed); the ticket service stores tickets and help center articles in PostgreSQL. The agent starts using it in Stage 6.
 > Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
 ## How to run
 
-Requirements: Node 22 (see `.nvmrc`) and pnpm 10. `corepack enable` installs the pnpm version set in `package.json`.
+Requirements: Node 22 (see `.nvmrc`), pnpm 10 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL).
 
 ```bash
 pnpm install
-cp apps/api/.env.example apps/api/.env.local
+pnpm bootstrap     # creates the .env.local files and the service token keys
+pnpm db:up         # starts PostgreSQL in Docker (host port 55432)
+pnpm db:migrate    # creates the tables
+pnpm db:seed       # loads the Annex B sample tickets and articles
 pnpm dev
 ```
+
+`pnpm bootstrap` is not `pnpm setup`: that one is a built-in pnpm command that changes your user environment.
 
 `pnpm dev` starts three processes:
 
@@ -43,25 +48,29 @@ If your machine uses another Node version globally (for example with nvm-windows
 | `pnpm typecheck` | Type-checks every package                        |
 | `pnpm build`     | Builds the UI into `apps/web/dist`               |
 | `pnpm format`    | Formats the repository (`format:check` verifies) |
+| `pnpm db:down`   | Stops PostgreSQL (the data stays in the volume)  |
+| `pnpm db:seed`   | Resets the sample data                           |
 
 ## Architecture
 
 ```
-apps/web (browser) ──/api──▶ apps/api ──▶ packages/agent ──▶ packages/shared
-                                 ┆
-                                 ┆ HTTP, from Stage 4
-                                 ▼
-                           apps/tickets ──▶ packages/shared
+apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent ──▶ packages/shared
+                                        │
+                                        │ packages/tickets-client
+                                        │ HTTP + JWT (ES256), used by the agent from Stage 6
+                                        ▼
+                                  apps/tickets ──▶ PostgreSQL (nexo_tickets)
 ```
 
-| Folder            | What it is                                                                     |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `apps/web`        | Client-only UI (Vite + React). In development, Vite forwards `/api` to the API |
-| `apps/api`        | Backend for the UI (Hono): runs the agent and streams its replies              |
-| `apps/tickets`    | Simulated ticket service (Hono), a separate process from the agent             |
-| `packages/agent`  | Mastra agent: instructions, tools and model selection                          |
-| `packages/shared` | Service desk vocabulary: ticket types, categories, priorities, deadlines       |
-| `docs`            | Product PRD, and the PRD and tech spec of each stage                           |
+| Folder                    | What it is                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `apps/web`                | Client-only UI (Vite + React). In development, Vite forwards `/api` to the API |
+| `apps/api`                | Backend for the UI (Hono): runs the agent and streams its replies              |
+| `apps/tickets`            | Simulated ticket service (Hono), a separate process from the agent             |
+| `packages/agent`          | Mastra agent: instructions, tools and model selection                          |
+| `packages/shared`         | Service desk vocabulary, ticket contracts and business-hours deadlines         |
+| `packages/tickets-client` | Client for the ticket service: signed tokens, retries and typed errors         |
+| `docs`                    | Product PRD, and the PRD and tech spec of each stage                           |
 
 **Secrets live only in `apps/api/.env.local`.** The UI has no environment variables on purpose: Vite publishes every `VITE_*` variable to the browser.
 
@@ -72,6 +81,17 @@ apps/web (browser) ──/api──▶ apps/api ──▶ packages/agent ──�
 - Every `POST` must be JSON, which, together with `SameSite=Lax`, protects against cross-site requests.
 - In the UI, each route asks `GET /api/auth/me` before rendering and sends each person to their own area. This only shapes the screens; the API is what protects the data.
 - `SESSION_SECRET` (32+ characters) seals the cookie. It is required in production; in development a fixed secret is used when it is missing.
+
+## Ticket service
+
+The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`; `nexo_api` is created for Stage 5).
+
+- **Only the API can call it.** Every request carries a JWT signed by the API with ES256: the requester is the token's `sub`, with issuer `nexo-api`, audience `nexo-tickets` and 60 seconds of life. The service checks all of it with the public key; it holds no private key, so it cannot create tokens. `pnpm bootstrap` writes the private key only to `apps/api/.env.local` and the public key only to `apps/tickets/.env.local`.
+- **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
+- **Deadlines** (Annex A, R9) are computed in São Paulo business hours (Monday to Friday, 8:00 to 18:00): critical 1 hour, high 4 business hours, medium 3 and low 5 business days, counted from the last update. Resolved tickets are never overdue; they can be reopened for 7 calendar days.
+- **Idempotent writes:** every `POST` needs an `Idempotency-Key`; a repeat replays the first response, so a retry never creates two tickets.
+- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
+- **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
 
 ## Model
 

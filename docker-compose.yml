@@ -1,0 +1,23 @@
+# Local PostgreSQL for development (stage 4 tech spec).
+# Host port 55432, because 5432 and 5433 are often taken by local PostgreSQL installs.
+# The credentials are for local development only.
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: nexo
+      POSTGRES_PASSWORD: nexo
+    ports:
+      - "55432:5432"
+    volumes:
+      # PostgreSQL 18 images keep their data under /var/lib/postgresql/<version>.
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexo"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
