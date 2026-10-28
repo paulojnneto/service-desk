@@ -2,7 +2,7 @@
 
 Support agent for Nexo's IT service desk (technical challenge).
 
-> Current state: **domain and ticket service** (Stage 4). Employees sign in and chat with the agent (simulated model, no LLM key needed); the ticket service stores tickets and help center articles in PostgreSQL. The agent starts using it in Stage 6.
+> Current state: **conversation persistence** (Stage 5). Employees sign in and chat with the agent (simulated model, no LLM key needed); conversations are stored and resumed another day; the ticket service stores tickets and help center articles in PostgreSQL. The agent starts using it in Stage 6.
 > Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
 ## How to run
@@ -13,7 +13,7 @@ Requirements: Node 22 (see `.nvmrc`), pnpm 10 (`corepack enable` installs the ve
 pnpm install
 pnpm bootstrap     # creates the .env.local files and the service token keys
 pnpm db:up         # starts PostgreSQL in Docker (host port 55432)
-pnpm db:migrate    # creates the tables
+pnpm db:migrate    # creates the tables of both databases
 pnpm db:seed       # loads the Annex B sample tickets and articles
 pnpm dev
 ```
@@ -35,7 +35,7 @@ Open http://localhost:3000 and sign in with a sample email and **any password**:
 | Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                 |
 | Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst area (console later) |
 
-The other sample people are in `packages/shared/src/directory.ts`. In the chat, ask for example "qual o horário do service desk?". The line above the reply shows the tool the agent called.
+The other sample people are in `packages/shared/src/directory.ts`. In the chat, ask for example "qual o horário do service desk?". The line above the reply shows the tool the agent called. Reload the page or sign in again later: the conversation is still there.
 
 If your machine uses another Node version globally (for example with nvm-windows), switch before installing: `nvm use 22`.
 
@@ -55,6 +55,7 @@ If your machine uses another Node version globally (for example with nvm-windows
 
 ```
 apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent ──▶ packages/shared
+                                        │  └──▶ PostgreSQL (nexo_api): conversations, sessions
                                         │
                                         │ packages/tickets-client
                                         │ HTTP + JWT (ES256), used by the agent from Stage 6
@@ -65,7 +66,7 @@ apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent
 | Folder                    | What it is                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------ |
 | `apps/web`                | Client-only UI (Vite + React). In development, Vite forwards `/api` to the API |
-| `apps/api`                | Backend for the UI (Hono): runs the agent and streams its replies              |
+| `apps/api`                | Backend for the UI (Hono): runs the agent, streams and stores the conversation |
 | `apps/tickets`            | Simulated ticket service (Hono), a separate process from the agent             |
 | `packages/agent`          | Mastra agent: instructions, tools and model selection                          |
 | `packages/shared`         | Service desk vocabulary, ticket contracts and business-hours deadlines         |
@@ -76,15 +77,27 @@ apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent
 
 ## Sign-in and sessions
 
-- `POST /api/auth/sign-in` looks the email up in the sample directory (any password works, as the challenge asks) and sets the `nexo_session` cookie: HTTP-only, `SameSite=Lax`, holding only the person's id and role, sealed (encrypted and signed) with `iron-session`. It lasts 10 hours, or 30 days with "Manter conectado".
-- The API reads the person only from that cookie, never from the request body. The chat route answers 401 without a session and 403 to analysts, and builds the agent's parameters itself: only the messages come from the client.
+- `POST /api/auth/sign-in` looks the email up in the sample directory (any password works, as the challenge asks) and sets the `nexo_session` cookie: HTTP-only, `SameSite=Lax`, holding only a random session id, sealed (encrypted and signed) with `iron-session`. The `sessions` table in `nexo_api` keeps the SHA-256 of that id with the person, the role and the expiry. It lasts 10 hours, or 7 days with "Manter conectado".
+- **Signing out revokes the session:** the row is deleted, so a copy of the cookie stops working at once. A session also survives an API restart.
+- The API reads the person only from the session, never from the request body. The chat route answers 401 without a session and 403 to analysts, and builds the agent's parameters itself.
 - Every `POST` must be JSON, which, together with `SameSite=Lax`, protects against cross-site requests.
 - In the UI, each route asks `GET /api/auth/me` before rendering and sends each person to their own area. This only shapes the screens; the API is what protects the data.
 - `SESSION_SECRET` (32+ characters) seals the cookie. It is required in production; in development a fixed secret is used when it is missing.
 
+## Conversations
+
+The API stores every conversation in its own database (`nexo_api`), so nothing is lost when the browser closes or the application restarts.
+
+- **One open conversation per employee,** with its messages in order. Each message keeps its author (employee, agent, analyst or system) and the parts the UI renders, so a reloaded reply shows the same actions. The state is "with the agent", "waiting for an analyst", "with an analyst" or "closed".
+- **The server holds the history.** The browser sends only the new message, and only its text; the agent always reads the history stored in the database, so a client cannot invent past messages.
+- **30 messages per conversation, on the server.** The 31st answers `409 message_limit_reached` without calling the agent, even when two arrive at once. "Nova conversa" (top bar, with a confirmation) closes the conversation and starts the count again.
+- **Replies are saved when they finish,** even if the browser closes mid-reply. A failed reply is not saved; "Tentar de novo" resends the same message, which is not saved or counted twice.
+- **The agent stays quiet** when the conversation is waiting for or with an analyst: the message is saved and the chat shows that the service desk has it. Handing a conversation over arrives in Stage 9.
+- **Privacy:** no route takes a conversation id; each one works on the session's own open conversation.
+
 ## Ticket service
 
-The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`; `nexo_api` is created for Stage 5).
+The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`).
 
 - **Only the API can call it.** Every request carries a JWT signed by the API with ES256: the requester is the token's `sub`, with issuer `nexo-api`, audience `nexo-tickets` and 60 seconds of life. The service checks all of it with the public key; it holds no private key, so it cannot create tokens. `pnpm bootstrap` writes the private key only to `apps/api/.env.local` and the public key only to `apps/tickets/.env.local`.
 - **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
