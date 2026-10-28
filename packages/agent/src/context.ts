@@ -50,6 +50,9 @@ export type NexoContext = {
   services: AgentServices;
   // Confidence of the agent's previous reply in this conversation (S-06.15).
   previousConfidence?: Confidence;
+  // The draft waiting for "Confirmar", with any change the employee made through "Editar"
+  // (stage 7 tech spec, PRD clarification).
+  waitingDraft?: DraftView;
 };
 
 export function requestContextFor(values: NexoContext): RequestContext<NexoContext> {
@@ -58,5 +61,6 @@ export function requestContextFor(values: NexoContext): RequestContext<NexoConte
   context.set("firstName", values.firstName);
   context.set("services", values.services);
   if (values.previousConfidence) context.set("previousConfidence", values.previousConfidence);
+  if (values.waitingDraft) context.set("waitingDraft", values.waitingDraft);
   return context;
 }

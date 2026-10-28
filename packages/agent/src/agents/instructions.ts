@@ -1,11 +1,11 @@
 import type { RequestContext } from "@mastra/core/request-context";
 import { TZDate } from "@date-fns/tz";
-import { OUT_OF_SCOPE_CHANNELS, TIME_ZONE } from "@nexo/shared";
+import { OUT_OF_SCOPE_CHANNELS, SLA_BY_PRIORITY, TIME_ZONE, type DraftView } from "@nexo/shared";
 import type { NexoContext } from "../context";
 
 // The agent's instructions, in Portuguese (stage 6 tech spec). The static part carries the
-// Annex A rules; the dynamic part is small: the person, today's date and a note when the
-// previous answer had low confidence (S-06.15).
+// Annex A rules; the dynamic part is small: the person, today's date, a note when the
+// previous answer had low confidence (S-06.15) and the waiting draft (stage 7).
 
 const CHANNELS = OUT_OF_SCOPE_CHANNELS.map((c) => `- ${c.area} (${c.topics}): ${c.channel}`).join(
   "\n",
@@ -21,7 +21,12 @@ Como decidir
 - Abrir chamado: consulte antes os chamados abertos (não duplique: se já existe chamado aberto para o mesmo problema, prepare uma atualização dele) e a central de ajuda. Defina tipo (INC quando algo parou ou não funciona; REQ para acesso, equipamento ou software) e categoria (Acesso, Rede e VPN, Hardware, Software, E-mail ou Outros). Pergunte quem está sendo afetado (só você, sua equipe ou toda a empresa) e se há algo parado ou um compromisso em risco, quando ainda não souber. A prioridade é calculada pelo sistema a partir dessas respostas.
 - Reabrir: chamados resolvidos há até 7 dias podem ser reabertos com um rascunho. Para os mais antigos, explique e ofereça um chamado novo que cite o antigo.
 - Criar, atualizar e reabrir sempre passam por um rascunho. Depois de preparar, mostre o resumo e peça para o funcionário conferir e clicar em "Confirmar". Você não cria nada: só o funcionário confirma. Nunca diga que criou, atualizou ou reabriu um chamado.
-- Se o funcionário pedir mudanças no rascunho, prepare outro (ele substitui o anterior). Se desistir, descarte o rascunho.
+- Se o funcionário pedir mudanças no rascunho, prepare outro (ele substitui o anterior). Se desistir, descarte o rascunho. Ele também pode editar o rascunho direto na tela; a versão atual aparece no fim destas instruções, em "Rascunho aguardando confirmação".
+
+Perguntas com botões
+- Quando a pergunta tiver respostas conhecidas, use perguntar em vez de escrever as opções no texto: quem está sendo afetado (Só eu, Minha equipe, Toda a empresa, Não sei), a urgência (Estou parado, Tenho compromisso hoje, Consigo contornar, Sem urgência) e, depois de mostrar um chamado vencido, se ele quer um analista (Falar com um analista, Adicionar informação, Não, obrigado).
+- Para saber de qual chamado o funcionário fala, liste os chamados abertos e chame perguntar com os números deles.
+- O texto da resposta só introduz a pergunta, sem repeti-la. Uma pergunta por resposta.
 
 Regras que você nunca quebra
 - Privacidade: você só vê os chamados de quem está conversando. Se pedirem o chamado de outra pessoa, responda como se o chamado não existisse entre os do funcionário.
@@ -54,5 +59,24 @@ export function instructionsFor(requestContext: RequestContext<NexoContext>): st
       "Na sua resposta anterior a confiança foi baixa. Se continuar sem entender o pedido, ofereça chamar um analista.",
     );
   }
+  const draft = requestContext.get("waitingDraft");
+  if (draft) lines.push("", describeWaitingDraft(draft));
   return lines.join("\n");
+}
+
+// The draft as it is now, so the agent knows about changes made with "Editar".
+export function describeWaitingDraft(draft: DraftView): string {
+  const head = `Rascunho aguardando confirmação: ${draft.number}`;
+  if (draft.kind === "update") {
+    return `${head}, informação nova para ${draft.ticketNumber}: "${draft.fields.message}".`;
+  }
+  if (draft.kind === "reopen") {
+    return `${head}, reabertura de ${draft.ticketNumber}. Motivo: "${draft.fields.reason}".`;
+  }
+  const f = draft.fields;
+  return [
+    `${head}, chamado novo.`,
+    `Título: ${f.title}. Descrição: ${f.description}`,
+    `Tipo ${f.type}, categoria ${f.category}, afetados ${f.impact}, urgência ${f.urgency}, prioridade ${SLA_BY_PRIORITY[f.priority].label}.`,
+  ].join("\n");
 }

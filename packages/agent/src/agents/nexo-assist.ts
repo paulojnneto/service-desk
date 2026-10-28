@@ -10,6 +10,7 @@ import {
   prepararReabertura,
 } from "../tools/drafts";
 import { transferirParaAnalista } from "../tools/handoff";
+import { perguntar } from "../tools/question";
 import { buscarNaCentral, consultarChamado, listarMeusChamados } from "../tools/read";
 import { instructionsFor } from "./instructions";
 
@@ -24,6 +25,7 @@ export const nexoTools = {
   prepararReabertura,
   descartarRascunho,
   transferirParaAnalista,
+  perguntar,
   registrarDecisao,
 };
 
