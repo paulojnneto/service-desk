@@ -12,10 +12,12 @@
     "db:migrate": "tsx src/scripts/migrate.ts"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
     "@hono/node-server": "2.1.5",
     "@mastra/ai-sdk": "1.11.2",
     "@nexo/agent": "workspace:*",
     "@nexo/shared": "workspace:*",
+    "@nexo/tickets-client": "workspace:*",
     "ai": "7.0.154",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.14",
@@ -25,8 +27,10 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
+    "@nexo/tickets": "workspace:*",
     "@types/pg": "8.23.1",
     "drizzle-kit": "0.31.11",
+    "jose": "6.2.12",
     "tsx": "4.23.15"
   }
 }

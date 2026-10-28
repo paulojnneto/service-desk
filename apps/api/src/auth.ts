@@ -1,11 +1,18 @@
 import { findPersonById, initials, type Person, type Role, type SessionUser } from "@nexo/shared";
 import { createMiddleware } from "hono/factory";
 import type { Db } from "./db/connect";
+import type { TicketsClient } from "@nexo/tickets-client";
 import type { RunAgent } from "./routes/chat";
 import { readSession } from "./session";
 
 export type AppEnv = {
-  Variables: { db: Db; now: () => Date; runAgent: RunAgent; person: Person | null };
+  Variables: {
+    db: Db;
+    tickets: TicketsClient;
+    now: () => Date;
+    runAgent: RunAgent;
+    person: Person | null;
+  };
 };
 
 // Turns the session cookie into a person. Identity never comes from the request body.

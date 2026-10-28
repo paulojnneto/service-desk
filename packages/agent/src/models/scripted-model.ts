@@ -12,8 +12,12 @@ import type {
 // Mastra treats it as a real model: tools really run, and only the decision
 // (call a tool or answer) comes from a script.
 
+export type ToolCall = { toolName: string; input: Record<string, unknown> };
+
+// One model step: call one or more tools (like parallel tool calls), or answer.
 export type ScriptStep =
   | { kind: "tool"; toolName: string; input: Record<string, unknown> }
+  | { kind: "tools"; calls: ToolCall[] }
   | { kind: "text"; text: string };
 
 export type Script = (prompt: LanguageModelV4Prompt) => ScriptStep;
@@ -30,16 +34,18 @@ const EMPTY_USAGE: LanguageModelV4Usage = {
 export function createScriptedModel(script: Script): LanguageModelV4 {
   let callCount = 0;
 
-  function toContent(step: ScriptStep): ScriptedContent {
-    callCount += 1;
-    return step.kind === "tool"
-      ? {
-          type: "tool-call",
-          toolCallId: `scripted-call-${callCount}`,
-          toolName: step.toolName,
-          input: JSON.stringify(step.input),
-        }
-      : { type: "text", text: step.text };
+  function toContent(step: ScriptStep): ScriptedContent[] {
+    if (step.kind === "text") return [{ type: "text", text: step.text }];
+    const calls = step.kind === "tool" ? [step] : step.calls;
+    return calls.map((call) => {
+      callCount += 1;
+      return {
+        type: "tool-call",
+        toolCallId: `scripted-call-${callCount}`,
+        toolName: call.toolName,
+        input: JSON.stringify(call.input),
+      };
+    });
   }
 
   return {
@@ -51,7 +57,7 @@ export function createScriptedModel(script: Script): LanguageModelV4 {
     async doGenerate(options: LanguageModelV4CallOptions) {
       const content = toContent(script(options.prompt));
       return {
-        content: [content],
+        content,
         finishReason: finishReasonFor(content),
         usage: EMPTY_USAGE,
         warnings: [],
@@ -73,19 +79,21 @@ export function createScriptedModel(script: Script): LanguageModelV4 {
   };
 }
 
-function toStreamParts(content: ScriptedContent): LanguageModelV4StreamPart[] {
+function toStreamParts(content: ScriptedContent[]): LanguageModelV4StreamPart[] {
   const finish: LanguageModelV4StreamPart = {
     type: "finish",
     usage: EMPTY_USAGE,
     finishReason: finishReasonFor(content),
   };
-  if (content.type === "tool-call") {
-    return [{ type: "stream-start", warnings: [] }, content, finish];
+  const [first] = content;
+  if (!first || first.type === "tool-call") {
+    const calls = content.filter((c): c is LanguageModelV4ToolCall => c.type === "tool-call");
+    return [{ type: "stream-start", warnings: [] }, ...calls, finish];
   }
 
   // Splits the text into words so streaming looks real in the UI.
   const id = "scripted-text";
-  const deltas = content.text
+  const deltas = first.text
     .split(/(?<=\s)/)
     .map((delta): LanguageModelV4StreamPart => ({ type: "text-delta", id, delta }));
   return [
@@ -97,8 +105,8 @@ function toStreamParts(content: ScriptedContent): LanguageModelV4StreamPart[] {
   ];
 }
 
-function finishReasonFor(content: ScriptedContent) {
-  return content.type === "tool-call"
+function finishReasonFor(content: ScriptedContent[]) {
+  return content[0]?.type === "tool-call"
     ? { unified: "tool-calls" as const, raw: undefined }
     : { unified: "stop" as const, raw: undefined };
 }

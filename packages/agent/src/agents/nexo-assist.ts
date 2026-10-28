@@ -1,15 +1,38 @@
 import { Agent } from "@mastra/core/agent";
+import type { NexoContext } from "../context";
 import { resolveModel } from "../models";
 import { consultarHorario } from "../tools/consultar-horario";
+import { registrarDecisao } from "../tools/decision";
+import {
+  descartarRascunho,
+  prepararAtualizacao,
+  prepararChamado,
+  prepararReabertura,
+} from "../tools/drafts";
+import { transferirParaAnalista } from "../tools/handoff";
+import { buscarNaCentral, consultarChamado, listarMeusChamados } from "../tools/read";
+import { instructionsFor } from "./instructions";
 
-export const nexoAssist = new Agent({
+// The tool keys are the names the model sees and the UI labels (stage 6 tech spec).
+export const nexoTools = {
+  consultarHorario,
+  buscarNaCentral,
+  listarMeusChamados,
+  consultarChamado,
+  prepararChamado,
+  prepararAtualizacao,
+  prepararReabertura,
+  descartarRascunho,
+  transferirParaAnalista,
+  registrarDecisao,
+};
+
+export const nexoAssist = new Agent<"nexo-assist", typeof nexoTools, undefined, NexoContext>({
   id: "nexo-assist",
   name: "Nexo Assist",
-  instructions: `
-    Você é o Nexo Assist, assistente do service desk de TI da Nexo.
-    Responda sempre em português do Brasil, de forma curta e clara.
-    Quando perguntarem sobre horário de atendimento ou plantão, use a tool consultarHorario.
-  `,
+  instructions: ({ requestContext }) => instructionsFor(requestContext),
   model: resolveModel(),
-  tools: { consultarHorario },
+  tools: nexoTools,
+  // The longest flow fits; a loop cannot run up cost (N10).
+  defaultOptions: { maxSteps: 6 },
 });

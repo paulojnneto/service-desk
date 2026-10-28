@@ -1,9 +1,11 @@
+import type { AgentServices } from "@nexo/agent";
 import { findPersonById, MESSAGES_PER_SESSION, type Person } from "@nexo/shared";
 import type { UIMessageChunk } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendEmployeeMessage,
   findOpenConversation,
+  listDecisions,
   listMessages,
   setConversationState,
 } from "../conversations/repository";
@@ -121,6 +123,15 @@ describe("chat route", () => {
     const reply = JSON.stringify(rows[1]?.parts);
     expect(reply).toContain("consultarHorario");
     expect(reply).toContain("das 8h às 18h");
+
+    const decisions = await listDecisions(db, rows[0]!.conversationId);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        messageId: rows[1]!.id,
+        action: "respondeu_central",
+        tools: [{ name: "consultarHorario", outcome: "ok" }],
+      }),
+    ]);
   });
 
   it("gives the agent the stored history, never the one in the body", async () => {
@@ -285,11 +296,15 @@ describe("parseChatBody", () => {
 describe("buildChatParams", () => {
   const ana = findPersonById("ana.souza") as Person;
 
-  it("passes only the history and the session's person to the agent", () => {
-    const params = buildChatParams([], ana);
+  it("passes only the history, the session's person and their services to the agent", () => {
+    const services = {} as AgentServices;
+    const params = buildChatParams([], ana, services, "baixa");
 
     expect(Object.keys(params).sort()).toEqual(["messages", "requestContext"]);
     expect(params.requestContext.get("userId")).toBe("ana.souza");
+    expect(params.requestContext.get("firstName")).toBe("Ana");
+    expect(params.requestContext.get("services")).toBe(services);
+    expect(params.requestContext.get("previousConfidence")).toBe("baixa");
   });
 });
 

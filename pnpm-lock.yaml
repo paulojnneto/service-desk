@@ -44,6 +44,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@date-fns/tz':
+        specifier: 1.5.0
+        version: 1.5.0
       '@hono/node-server':
         specifier: 2.1.5
         version: 2.1.5(hono@4.13.14)
@@ -56,6 +59,9 @@ importers:
       '@nexo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@nexo/tickets-client':
+        specifier: workspace:*
+        version: link:../../packages/tickets-client
       ai:
         specifier: 7.0.154
         version: 7.0.154(zod@4.6.7)
@@ -78,12 +84,18 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.5.10
         version: 0.5.10
+      '@nexo/tickets':
+        specifier: workspace:*
+        version: link:../tickets
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -191,6 +203,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 4.0.29
         version: 4.0.29
+      '@date-fns/tz':
+        specifier: 1.5.0
+        version: 1.5.0
       '@mastra/core':
         specifier: 1.79.0
         version: 1.79.0(ai@7.0.154(zod@4.6.7))(zod@4.6.7)

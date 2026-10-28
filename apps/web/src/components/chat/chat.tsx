@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
 import { ArrowUp, Headset, LoaderCircle, RotateCcw } from "lucide-react";
 import {
   MESSAGES_PER_SESSION,
@@ -17,6 +17,9 @@ import {
   SystemNote,
   UserMessage,
 } from "./messages";
+import { decideDraft } from "../../lib/api";
+import { draftOf } from "./draft-of";
+import type { DraftActions } from "./draft-block";
 import { NewConversation } from "./new-conversation";
 
 // Starting points for the empty chat (stage 3 PRD, decision 2).
@@ -38,8 +41,11 @@ export function Chat({
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<ConversationState>(conversation?.state ?? "with_agent");
+  const [pendingDraftId, setPendingDraftId] = useState(conversation?.pendingDraftId ?? null);
+  const [deciding, setDeciding] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const revalidator = useRevalidator();
-  const { messages, sendMessage, regenerate, status, error } = useChat<ChatMessage>({
+  const { messages, setMessages, sendMessage, regenerate, status, error } = useChat<ChatMessage>({
     // The history comes from the server (stage 5 PRD, S-05.5).
     messages: (conversation?.messages ?? []) as ChatMessage[],
     transport: new DefaultChatTransport({
@@ -53,7 +59,22 @@ export function Chat({
     onData: (part) => {
       if (part.type === "data-conversation-state") setState((part.data as StatePart).state);
     },
-    onFinish: () => {
+    onFinish: ({ message }) => {
+      // A new draft replaces the one waiting (stage 6 PRD, S-06.6).
+      const draft = message.parts.map(draftOf).findLast(Boolean);
+      if (draft?.status === "pending") {
+        setPendingDraftId(draft.id);
+        setDraftError(null);
+      }
+      // After a handoff the agent stays quiet (S-06.12).
+      const handedOff = message.parts.some(
+        (part) =>
+          isToolUIPart(part) &&
+          getToolName(part) === "transferirParaAnalista" &&
+          part.state === "output-available" &&
+          (part.output as { transferido?: boolean }).transferido,
+      );
+      if (handedOff) setState("waiting_analyst");
       // The first message created the conversation: load it, so "Nova conversa" appears.
       if (!conversation) void revalidator.revalidate();
     },
@@ -70,6 +91,35 @@ export function Chat({
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, status]);
+
+  async function decide(draftId: string, action: "confirm" | "cancel") {
+    setDeciding(true);
+    setDraftError(null);
+    const result = await decideDraft(draftId, action);
+    setDeciding(false);
+    const reply = result.message;
+    if (reply) setMessages((all) => [...all, reply as ChatMessage]);
+    if (result.ok || result.error === "ticket_conflict") {
+      setPendingDraftId(null);
+      return;
+    }
+    if (result.error === "draft_closed") {
+      setPendingDraftId(null);
+      return;
+    }
+    setDraftError(
+      result.error === "draft_in_progress"
+        ? "Já estou registrando este rascunho."
+        : "Não consegui registrar agora. O rascunho continua aqui; tente de novo em instantes.",
+    );
+  }
+
+  const drafts: DraftActions = {
+    pendingDraftId,
+    busy: deciding || busy,
+    error: draftError,
+    decide,
+  };
 
   function send(text: string) {
     const trimmed = text.trim();
@@ -88,7 +138,7 @@ export function Chat({
             if (message.metadata?.author === "system") {
               return <SystemNote key={message.id} message={message} />;
             }
-            return <AgentMessage key={message.id} message={message} />;
+            return <AgentMessage key={message.id} message={message} drafts={drafts} />;
           })}
           {status === "submitted" && !withServiceDesk && (
             <StatusLine>

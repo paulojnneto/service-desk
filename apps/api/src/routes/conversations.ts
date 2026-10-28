@@ -3,8 +3,10 @@ import { requireRole, type AppEnv } from "../auth";
 import {
   closeOpenConversation,
   findOpenConversation,
+  listDecisions,
   listMessages,
 } from "../conversations/repository";
+import { findWaitingDraft } from "../drafts/repository";
 import { toConversationView } from "../conversations/to-ui";
 
 // The employee's open conversation. No route takes a conversation id: it is always the
@@ -18,7 +20,14 @@ export const conversationRoutes = new Hono<AppEnv>()
     try {
       const open = await findOpenConversation(db, c.get("person")!.id);
       if (!open) return c.json({ conversation: null });
-      return c.json({ conversation: toConversationView(open, await listMessages(db, open.id)) });
+      const [rows, decisions, draft] = await Promise.all([
+        listMessages(db, open.id),
+        listDecisions(db, open.id),
+        findWaitingDraft(db, open.id),
+      ]);
+      return c.json({
+        conversation: toConversationView(open, rows, decisions, draft?.id ?? null),
+      });
     } catch (error) {
       console.error("Could not load the conversation:", error);
       return c.json({ error: "unavailable" }, 503);

@@ -17,7 +17,7 @@ describe("migrations", () => {
       sql`select table_name from information_schema.tables where table_schema = 'public'`,
     );
     expect(tables.map((row) => row.table_name)).toEqual(
-      expect.arrayContaining(["conversations", "messages", "sessions"]),
+      expect.arrayContaining(["conversations", "decisions", "drafts", "messages", "sessions"]),
     );
   });
 
@@ -42,5 +42,23 @@ describe("migrations", () => {
     await expect(
       db.execute(sql`update conversations set employee_messages = 31`),
     ).rejects.toThrow();
+  });
+
+  it("allow one waiting draft per conversation, numbered from D-381", async () => {
+    const db = await createTestDb();
+    await db.execute(openConversation("ana.souza"));
+    const draft = (status: string) => sql`
+      insert into drafts (conversation_id, employee_id, kind, fields, status, created_at)
+      select id, 'ana.souza', 'create', '{}'::jsonb, ${status}, now() from conversations`;
+
+    await db.execute(draft("pending"));
+    await expect(db.execute(draft("confirming"))).rejects.toThrow();
+    await db.execute(draft("superseded"));
+
+    const numbers = await queryRows<{ number: number }>(
+      db,
+      sql`select number from drafts order by number`,
+    );
+    expect(numbers[0]?.number).toBe(381);
   });
 });

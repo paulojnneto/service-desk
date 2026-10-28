@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DecisionRecord } from "./decisions";
 
 // Contracts of the stored conversations, shared by the API and the UI (stage 5 tech spec).
 
@@ -19,6 +20,8 @@ export const MessageMetadata = z.object({
   author: MessageAuthor,
   authorName: z.string().optional(),
   createdAt: z.string(),
+  // Agent replies only (stage 6 PRD, S-06.13).
+  decision: DecisionRecord.optional(),
 });
 export type MessageMetadata = z.infer<typeof MessageMetadata>;
 
@@ -37,6 +40,8 @@ export type ConversationView = {
   employeeMessages: number;
   limit: number;
   startedAt: string;
+  // The draft waiting for "Confirmar" or "Cancelar", if any.
+  pendingDraftId: string | null;
   messages: StoredMessage[];
 };
 

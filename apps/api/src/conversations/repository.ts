@@ -1,7 +1,12 @@
-import { MESSAGES_PER_SESSION, type ConversationState, type MessageAuthor } from "@nexo/shared";
+import {
+  MESSAGES_PER_SESSION,
+  type ConversationState,
+  type DecisionRecord,
+  type MessageAuthor,
+} from "@nexo/shared";
 import { and, asc, desc, eq, lt, ne, sql } from "drizzle-orm";
 import type { Db } from "../db/connect";
-import { conversations, messages } from "../db/schema";
+import { conversations, decisions, messages } from "../db/schema";
 
 // Every read and write of the stored conversations. Each function takes the employee's
 // id from the session and filters by it, so another person's conversation never leaves
@@ -9,6 +14,7 @@ import { conversations, messages } from "../db/schema";
 
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
+export type DecisionRow = typeof decisions.$inferSelect;
 
 export type AppendResult =
   { status: "saved" | "duplicate"; conversation: ConversationRow } | { status: "limit_reached" };
@@ -87,7 +93,8 @@ export async function appendEmployeeMessage(
   });
 }
 
-// Saves a message by the agent, an analyst or the system in the employee's open conversation.
+// Saves a message by the agent, an analyst or the system in the employee's open conversation,
+// with the agent's decision record when there is one (stage 6 PRD, S-06.13).
 export async function appendMessage(
   db: Db,
   employeeId: string,
@@ -96,6 +103,7 @@ export async function appendMessage(
     author: Exclude<MessageAuthor, "employee">;
     authorId?: string;
     parts: unknown[];
+    decision?: DecisionRecord;
   },
   now: Date,
 ): Promise<MessageRow | null> {
@@ -118,8 +126,31 @@ export async function appendMessage(
         createdAt: now,
       })
       .returning();
+    if (row && message.decision) {
+      await tx.insert(decisions).values({
+        messageId: row.id,
+        conversationId: open.id,
+        ...message.decision,
+        createdAt: now,
+      });
+    }
     return row ?? null;
   });
+}
+
+export async function listDecisions(db: Db, conversationId: string): Promise<DecisionRow[]> {
+  return db.select().from(decisions).where(eq(decisions.conversationId, conversationId));
+}
+
+// The confidence of the agent's last reply, for the low-confidence rule (S-06.15).
+export async function lastConfidence(db: Db, conversationId: string) {
+  const [row] = await db
+    .select({ confidence: decisions.confidence })
+    .from(decisions)
+    .where(eq(decisions.conversationId, conversationId))
+    .orderBy(desc(decisions.createdAt))
+    .limit(1);
+  return row?.confidence as DecisionRecord["confidence"] | undefined;
 }
 
 export async function lastMessage(db: Db, conversationId: string): Promise<MessageRow | null> {
