@@ -106,6 +106,9 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.5.10
         version: 0.5.10
+      '@nexo/tickets-client':
+        specifier: workspace:*
+        version: link:../../packages/tickets-client
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
@@ -191,6 +194,18 @@ importers:
       date-fns:
         specifier: 4.4.0
         version: 4.4.0
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  packages/tickets-client:
+    dependencies:
+      '@nexo/shared':
+        specifier: workspace:*
+        version: link:../shared
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
       zod:
         specifier: 4.6.7
         version: 4.6.7
