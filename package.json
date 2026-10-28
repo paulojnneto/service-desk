@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
-    "db:migrate": "pnpm --filter @nexo/tickets db:migrate",
+    "db:migrate": "pnpm --filter @nexo/tickets --filter @nexo/api db:migrate",
     "db:seed": "pnpm --filter @nexo/tickets db:seed",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

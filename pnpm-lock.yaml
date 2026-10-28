@@ -59,16 +59,31 @@ importers:
       ai:
         specifier: 7.0.154
         version: 7.0.154(zod@4.6.7)
+      drizzle-orm:
+        specifier: 0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.1)
       hono:
         specifier: 4.13.14
         version: 4.13.14
       iron-session:
         specifier: 8.0.4
         version: 8.0.4
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
       zod:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.10
+        version: 0.5.10
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      drizzle-kit:
+        specifier: 0.31.11
+        version: 0.31.11
       tsx:
         specifier: 4.23.15
         version: 4.23.15
