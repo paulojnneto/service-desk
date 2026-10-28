@@ -6,7 +6,7 @@
     "node": ">=22.13 <23"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @nexo/web --filter @nexo/tickets dev",
+    "dev": "pnpm --parallel --filter @nexo/web --filter @nexo/api --filter @nexo/tickets dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
