@@ -4,6 +4,7 @@ import type { Db } from "./db/connect";
 import type { TicketsEnv } from "./env-types";
 import { idempotency } from "./middleware/idempotency";
 import { serviceToken } from "./middleware/service-token";
+import { articleRoutes } from "./routes/articles";
 import { ticketRoutes } from "./routes/tickets";
 
 export type AppOptions = {
@@ -29,6 +30,7 @@ export function createApp({ db, tokenPublicKey, now = () => new Date() }: AppOpt
   api.use(serviceToken(tokenPublicKey));
   api.use(idempotency);
   api.route("/tickets", ticketRoutes);
+  api.route("/articles", articleRoutes);
 
   app.route("/", api);
   return app;
