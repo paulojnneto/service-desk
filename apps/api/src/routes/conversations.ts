@@ -6,7 +6,7 @@ import {
   listDecisions,
   listMessages,
 } from "../conversations/repository";
-import { findWaitingDraft } from "../drafts/repository";
+import { findWaitingDraft, listDrafts } from "../drafts/repository";
 import { toConversationView } from "../conversations/to-ui";
 
 // The employee's open conversation. No route takes a conversation id: it is always the
@@ -20,13 +20,14 @@ export const conversationRoutes = new Hono<AppEnv>()
     try {
       const open = await findOpenConversation(db, c.get("person")!.id);
       if (!open) return c.json({ conversation: null });
-      const [rows, decisions, draft] = await Promise.all([
+      const [rows, decisions, draft, drafts] = await Promise.all([
         listMessages(db, open.id),
         listDecisions(db, open.id),
         findWaitingDraft(db, open.id),
+        listDrafts(db, open.id),
       ]);
       return c.json({
-        conversation: toConversationView(open, rows, decisions, draft?.id ?? null),
+        conversation: toConversationView(open, rows, decisions, draft?.id ?? null, drafts),
       });
     } catch (error) {
       console.error("Could not load the conversation:", error);

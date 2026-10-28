@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MESSAGES_PER_SESSION,
   type Confidence,
+  type DraftView,
   type Person,
   type StoredMessage,
 } from "@nexo/shared";
@@ -26,6 +27,7 @@ import {
   type AppendResult,
 } from "../conversations/repository";
 import { toAgentHistory } from "../conversations/to-ui";
+import { findWaitingDraft, toDraftView } from "../drafts/repository";
 
 // The client sends only the new message (stage 5 PRD, S-05.6). The history the agent
 // reads always comes from the database, so a client cannot invent past messages.
@@ -57,7 +59,8 @@ export function buildChatParams(
   history: StoredMessage[],
   person: Person,
   services: AgentServices,
-  previousConfidence?: Confidence,
+  // Confidence of the previous reply (S-06.15) and the draft waiting for "Confirmar" (stage 7).
+  extra: { previousConfidence?: Confidence; waitingDraft?: DraftView } = {},
 ) {
   return {
     messages: history as unknown as UIMessage[],
@@ -65,7 +68,8 @@ export function buildChatParams(
       userId: person.id,
       firstName: person.name.split(" ")[0] ?? person.name,
       services,
-      ...(previousConfidence ? { previousConfidence } : {}),
+      ...(extra.previousConfidence ? { previousConfidence: extra.previousConfidence } : {}),
+      ...(extra.waitingDraft ? { waitingDraft: extra.waitingDraft } : {}),
     }),
   };
 }
@@ -99,6 +103,7 @@ export const chatRoutes = new Hono<AppEnv>()
     let saved: AppendResult;
     let history: Awaited<ReturnType<typeof listMessages>>;
     let previousConfidence: Confidence | undefined;
+    let waitingDraft: DraftView | undefined;
     try {
       saved = await appendEmployeeMessage(db, person.id, input, now());
       if (saved.status === "limit_reached") {
@@ -106,6 +111,8 @@ export const chatRoutes = new Hono<AppEnv>()
       }
       history = await listMessages(db, saved.conversation.id);
       previousConfidence = await lastConfidence(db, saved.conversation.id);
+      const draft = await findWaitingDraft(db, saved.conversation.id);
+      waitingDraft = draft ? toDraftView(draft) : undefined;
     } catch (error) {
       console.error("Could not save the message:", error);
       return c.json({ error: "unavailable" }, 503);
@@ -138,7 +145,7 @@ export const chatRoutes = new Hono<AppEnv>()
     let reply: ReadableStream<UIMessageChunk>;
     try {
       reply = await c.get("runAgent")(
-        buildChatParams(agentHistory, person, services, previousConfidence),
+        buildChatParams(agentHistory, person, services, { previousConfidence, waitingDraft }),
       );
     } catch (error) {
       // The message stays saved; the UI's retry sends it again without counting it twice.

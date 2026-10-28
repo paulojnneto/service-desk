@@ -102,7 +102,7 @@ export async function cancelDraft(deps: Omit<Deps, "tickets">, draftId: string) 
 }
 
 // The draft must be the employee's and belong to their open conversation.
-async function ownWaitingDraft(
+export async function ownWaitingDraft(
   db: Db,
   employeeId: string,
   draftId: string,

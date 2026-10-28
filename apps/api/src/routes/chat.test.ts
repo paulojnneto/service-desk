@@ -298,7 +298,7 @@ describe("buildChatParams", () => {
 
   it("passes only the history, the session's person and their services to the agent", () => {
     const services = {} as AgentServices;
-    const params = buildChatParams([], ana, services, "baixa");
+    const params = buildChatParams([], ana, services, { previousConfidence: "baixa" });
 
     expect(Object.keys(params).sort()).toEqual(["messages", "requestContext"]);
     expect(params.requestContext.get("userId")).toBe("ana.souza");

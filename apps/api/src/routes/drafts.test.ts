@@ -52,6 +52,24 @@ async function draftFor(employeeId: string, input: DraftInput = VPN) {
   return prepareDraft(db, { employeeId, conversationId: open!.id }, input, new Date());
 }
 
+async function patch(cookie: string, id: string, body: unknown) {
+  const res = await app.request(`/api/drafts/${id}`, {
+    method: "PATCH",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: (await res.json()) as Answer };
+}
+
+const editable = {
+  type: "INC",
+  title: "VPN não conecta no notebook — erro 809",
+  description: "Desde ontem o notebook (Windows 11) não conecta na VPN e mostra o erro 809.",
+  category: "Rede e VPN",
+  impact: "so_eu",
+  urgency: "compromisso_hoje",
+} as const;
+
 async function decide(cookie: string, id: string, action: "confirm" | "cancel") {
   const res = await postJson(app, `/api/drafts/${id}/${action}`, {}, cookie);
   return { status: res.status, body: (await res.json()) as Answer };
@@ -196,5 +214,120 @@ describe("POST /api/drafts/:id/cancel", () => {
     const draft = await draftFor("ana.souza");
 
     expect((await decide(rafael.cookie, draft.id, "cancel")).status).toBe(403);
+  });
+});
+
+describe("PATCH /api/drafts/:id", () => {
+  it("recalculates priority and deadline on the server and keeps the same draft", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const draft = await draftFor("ana.souza");
+
+    const { status, body } = await patch(cookie, draft.id, {
+      kind: "create",
+      fields: { ...editable, title: "VPN fora para a equipe", impact: "equipe", urgency: "parado" },
+    });
+
+    expect(status).toBe(200);
+    expect(body.draft).toMatchObject({
+      id: draft.id,
+      number: draft.number,
+      status: "pending",
+      fields: { title: "VPN fora para a equipe", priority: "critica", impact: "equipe" },
+    });
+    const fields = (body.draft as Extract<DraftView, { kind: "create" }>).fields;
+    expect(new Date(fields.dueAt).getTime()).toBeLessThan(
+      new Date((draft as Extract<DraftView, { kind: "create" }>).fields.dueAt).getTime(),
+    );
+    expect(body.message?.metadata.author).toBe("system");
+    expect((body.message?.parts[0] as { text: string }).text).toBe(
+      `Você editou o rascunho ${draft.number}.`,
+    );
+  });
+
+  it("ignores a priority sent by the client and lists duplicates again when the category changes", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const draft = await draftFor("ana.souza");
+
+    const { status, body } = await patch(cookie, draft.id, {
+      kind: "create",
+      fields: { ...editable, category: "Hardware", urgency: "sem_urgencia", priority: "critica" },
+    });
+
+    expect(status).toBe(200);
+    expect(body.draft).toMatchObject({ fields: { priority: "baixa" } });
+    expect(body.draft?.duplicates.map((d) => d.number)).toContain("INC-20311");
+  });
+
+  it("does not count the edit note toward the message limit", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const draft = await draftFor("ana.souza");
+    const before = (await findOpenConversation(db, "ana.souza"))!.employeeMessages;
+
+    await patch(cookie, draft.id, { kind: "create", fields: editable });
+
+    expect((await findOpenConversation(db, "ana.souza"))!.employeeMessages).toBe(before);
+  });
+
+  it("refuses invalid fields, another kind, closed drafts, other people and analysts", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const bruno = await signIn(app, "bruno.tavares@nexo.com.br");
+    const rafael = await signIn(app, "rafael.lima@nexo.com.br");
+    const draft = await draftFor("ana.souza");
+
+    expect(
+      (await patch(cookie, draft.id, { kind: "create", fields: { ...editable, title: "" } }))
+        .status,
+    ).toBe(400);
+    expect(
+      (await patch(cookie, draft.id, { kind: "update", fields: { message: "oi" } })).status,
+    ).toBe(400);
+    expect((await patch(bruno.cookie, draft.id, { kind: "create", fields: editable })).status).toBe(
+      404,
+    );
+    expect(
+      (await patch(rafael.cookie, draft.id, { kind: "create", fields: editable })).status,
+    ).toBe(403);
+
+    await decide(cookie, draft.id, "cancel");
+    expect(await patch(cookie, draft.id, { kind: "create", fields: editable })).toMatchObject({
+      status: 409,
+      body: { error: "draft_closed" },
+    });
+  });
+
+  it("edits the message of an update draft", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const draft = await draftFor("ana.souza", {
+      kind: "update",
+      ticketNumber: "INC-20311",
+      fields: { message: "Também trava no Excel." },
+    });
+
+    const { body } = await patch(cookie, draft.id, {
+      kind: "update",
+      fields: { message: "Também trava no Excel e no Teams." },
+    });
+
+    expect(body.draft?.fields).toEqual({ message: "Também trava no Excel e no Teams." });
+  });
+});
+
+describe("GET /api/conversations/current with drafts", () => {
+  it("returns every draft in its current state", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const first = await draftFor("ana.souza");
+    const second = await draftFor("ana.souza");
+    await decide(cookie, second.id, "confirm");
+
+    const res = await app.request("/api/conversations/current", { headers: { cookie } });
+    const { conversation } = (await res.json()) as {
+      conversation: { drafts: DraftView[]; pendingDraftId: string | null };
+    };
+
+    expect(conversation.drafts.map((d) => [d.id, d.status, d.resultTicket])).toEqual([
+      [first.id, "superseded", null],
+      [second.id, "confirmed", "INC-20312"],
+    ]);
+    expect(conversation.pendingDraftId).toBeNull();
   });
 });
