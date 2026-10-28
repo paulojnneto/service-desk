@@ -216,3 +216,18 @@ Manual validation in the browser, as Ana:
 | Global Ctrl+Enter conflicts with browser or OS shortcuts                | Handled only inside the chat page, with `preventDefault` only when a draft is waiting                                                                                           |
 | Digits picking options surprise someone typing a number                 | Only with the composer empty and the focus outside the edit form; the hint "1–4" is shown on the options                                                                        |
 | The tool part's snapshot and the draft's current state disagree         | The card always prefers `draftsById`; the snapshot is used only until the map has the draft                                                                                     |
+
+## Deviations during implementation
+
+Recorded after the code, before the pull request.
+
+| Deviation                                                                                                                              | Why                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| The action labels landed with the cards (`feat(web): ticket card, ticket picker and quick-reply options`), not in the shortcuts commit | `messages.tsx` was rewritten for the cards, and the labels come from the same `parts.ts` |
+| `perguntar` with both or neither of `opcoes` and `chamados` answers `permitido: false` instead of an error                             | The decision record then shows it as `recusado`, like the other refusals                 |
+| The ticket card comes before the reply text, and the picker's question ends the text bubble                                            | The prototype's order in Screen 3                                                        |
+| `buildChatParams` takes `{ previousConfidence, waitingDraft }` instead of a fifth argument                                             | Two optional values read better by name                                                  |
+| Extra commit: the simulated model asks the Windows version with options and names the day of a deadline that is not today              | Found in the browser check: "a resposta chega até 12:00" for a deadline the next day     |
+| Extra commit: the employee shell (Stage 3 files) becomes a rail of icons below `md`                                                    | Without it the sidebar took half of a 375 px screen and S-07.14 could not be met         |
+| The "ticket service stopped" state was checked by tests (`cardsOf`, the draft routes), not in the browser                              | The local servers were the user's own `pnpm dev`; stopping them was not an option        |
+| Manual run with GPT-5.5 stopped after Screens 2 and 3, at the user's request (cost)                                                    | See the pull request for what it showed                                                  |
