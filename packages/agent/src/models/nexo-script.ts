@@ -7,13 +7,15 @@ import type { Script, ScriptStep, ToolCall } from "./scripted-model";
 // reopening checks run for real, so the tests exercise the rules in code.
 //
 // Each turn has phases: the first step calls the lookup tools and registrarDecisao, a second
-// step may prepare a draft from what came back, and the last step answers.
+// step may prepare a draft or ask with perguntar from what came back, and the last step
+// answers. Questions with known answers use perguntar, as in Screens 2 and 3 (stage 7).
 
 type Turn = {
   user: string; // the employee's last message, normalized
   raw: string; // the same message as typed
   earlierUser: string[]; // previous employee messages, normalized, oldest first
   lastAgentText: string; // the agent's last text before this message
+  lastQuestion: string; // what the agent asked with perguntar in its last reply, normalized
   results: Map<string, Record<string, unknown>>; // tool results in this turn
   system: string;
 };
@@ -36,14 +38,20 @@ function pickFlow(turn: Turn): Flow {
     return injection;
   }
   if (/^(cancela|cancele|cancelar|desisto|deixa pra la|nao quero mais)/.test(user)) return discard;
+  // The options offered after an overdue ticket (Screen 3).
+  if (/analista/.test(turn.lastQuestion) && /adicionar informacao/.test(user)) return askWhatToAdd;
+  if (/analista/.test(turn.lastQuestion) && /^nao/.test(user)) return declined;
   if (/analista|atendente|humano|falar com (uma )?pessoa/.test(user)) return handoff;
   if (outOfScopeArea(user)) return outOfScope;
   if (/reabr/.test(user) && number) return reopen;
   if (/adicion|acrescent|complement/.test(user) && number) return addInformation;
+  if (/quer acrescentar ao (inc|req)-\d+/.test(normalize(turn.lastAgentText)))
+    return addInformation;
   if (number) return ticketStatus;
   if (/status|meu chamado|meus chamados|andamento/.test(user)) return listTickets;
   if (/horario|plantao|que horas|funciona o service desk/.test(user)) return hours;
-  if (/quem esta sendo afetado/.test(normalize(turn.lastAgentText))) return createFromAnswers;
+  if (/quem esta sendo afetado|consegue trabalhar/.test(turn.lastQuestion))
+    return createFromAnswers;
   if (
     /vpn/.test(user) ||
     (/versao do windows/.test(normalize(turn.lastAgentText)) && /windows/.test(user))
@@ -86,10 +94,17 @@ const listTickets: Flow = (turn) => {
   const tickets = (result.chamados ?? []) as TicketSummary[];
   if (tickets.length === 0) return text("Você não tem chamados abertos no momento.");
   if (tickets.length === 1) return text(describeTicket(tickets[0]!));
-  const lines = tickets.map((t) => `- ${t.numero} · ${t.titulo} (${STATUS[t.status] ?? t.status})`);
-  return text(
-    `Você tem ${tickets.length} chamados abertos. Sobre qual deles quer saber?\n${lines.join("\n")}`,
-  );
+  const picker = turn.results.get("perguntar");
+  if (!picker) {
+    return tools(
+      call("perguntar", {
+        pergunta: "Sobre qual deles quer saber?",
+        chamados: tickets.map((t) => t.numero),
+      }),
+    );
+  }
+  if (picker.indisponivel) return unavailableText();
+  return text(`Você tem ${tickets.length} chamados abertos.`);
 };
 
 const ticketStatus: Flow = (turn) => {
@@ -107,11 +122,43 @@ const ticketStatus: Flow = (turn) => {
       `Não encontrei o ${number} entre os seus chamados. Confira o número ou me diga do que se trata.`,
     );
   }
-  return text(describeTicket(result.chamado as TicketSummary, true));
+  const ticket = result.chamado as TicketSummary;
+  if (!ticket.vencido) return text(describeTicket(ticket));
+  // Overdue: the card shows the ticket, and the employee picks what to do (Screen 3).
+  if (!turn.results.has("perguntar")) {
+    return tools(
+      call("perguntar", {
+        pergunta: "Quer que eu chame um analista?",
+        opcoes: ["Falar com um analista", "Adicionar informação", "Não, obrigado"],
+      }),
+    );
+  }
+  return text(describeTicket(ticket));
+};
+
+const askWhatToAdd: Flow = (turn) => {
+  const number = lastTicketNumber(turn);
+  if (!turn.results.has("registrarDecisao")) {
+    return tools(
+      decision("adicionar_informacao", "alta", "Escolheu adicionar informação ao chamado.", ["R3"]),
+    );
+  }
+  return text(
+    number
+      ? `Certo. O que você quer acrescentar ao ${number}?`
+      : "Certo. Qual chamado e o que você quer acrescentar?",
+  );
+};
+
+const declined: Flow = (turn) => {
+  if (!turn.results.has("registrarDecisao")) {
+    return tools(decision("status_chamado", "alta", "Não quis chamar um analista agora.", []));
+  }
+  return text("Tudo bem. Se precisar, é só me chamar por aqui.");
 };
 
 const addInformation: Flow = (turn) => {
-  const number = ticketNumberIn(turn.raw)!;
+  const number = (ticketNumberIn(turn.raw) ?? ticketNumberIn(turn.lastAgentText))!;
   const result = turn.results.get("prepararAtualizacao");
   if (!result) {
     const message = turn.raw.replace(/^.*?(INC|REQ)-\d+\s*[:,.-]?\s*/i, "").trim() || turn.raw;
@@ -176,25 +223,51 @@ const vpn: Flow = (turn) => {
       "O artigo do erro 809 depende do sistema. Qual a versão do Windows do seu notebook: 10 ou 11?",
     );
   }
+  if (!turn.results.has("perguntar")) {
+    return tools(
+      call("perguntar", {
+        pergunta: "Quem está sendo afetado?",
+        opcoes: ["Só eu", "Minha equipe", "Toda a empresa", "Não sei"],
+      }),
+    );
+  }
   return text(
-    "Não há chamado aberto sobre VPN, e o artigo do erro 809 vale só para Windows 10 — o seu é Windows 11. Vou abrir um chamado.\n\nQuem está sendo afetado? Só eu, minha equipe, toda a empresa ou não sei.",
+    "Não há chamado aberto sobre VPN, e o artigo do erro 809 vale só para Windows 10 — o seu é Windows 11. Vou abrir um chamado.",
   );
 };
 
 // The answer to "Quem está sendo afetado?" (prototype: "Só eu. Tenho reunião com um cliente às 14h…").
+// When the answer has no urgency ("Só eu"), the urgency is asked with options first.
 const createFromAnswers: Flow = (turn) => {
   const draft = turn.results.get("prepararChamado");
+  const answeringUrgency = /consegue trabalhar/.test(turn.lastQuestion);
+  if (!answeringUrgency && !URGENCY_HINT.test(turn.user)) {
+    if (!turn.results.has("perguntar")) {
+      return tools(
+        call("perguntar", {
+          pergunta: "Você consegue trabalhar enquanto isso não se resolve?",
+          opcoes: ["Estou parado", "Tenho compromisso hoje", "Consigo contornar", "Sem urgência"],
+        }),
+        decision("abrir_chamado", "alta", "Sei quem é afetado; falta a urgência.", ["R9"]),
+      );
+    }
+    return text("Entendi. Só mais uma coisa para calcular a prioridade:");
+  }
   if (!draft) {
-    const impact = /empresa|todo mundo|todos/.test(turn.user)
+    // The impact was answered in this message or, after the urgency question, in the one before.
+    const impactAnswer = answeringUrgency ? (turn.earlierUser.at(-1) ?? "") : turn.user;
+    const impact = /empresa|todo mundo|todos/.test(impactAnswer)
       ? "empresa"
-      : /equipe|time|setor/.test(turn.user)
+      : /equipe|time|setor/.test(impactAnswer)
         ? "equipe"
         : "so_eu";
-    const urgency = /parad|nao consigo trabalhar|nada funciona/.test(turn.user)
-      ? "parado"
-      : /reuniao|hoje|cliente|prazo|\d{1,2}h/.test(turn.user)
-        ? "compromisso_hoje"
-        : "contornavel";
+    const urgency = /sem urgencia/.test(turn.user)
+      ? "sem_urgencia"
+      : /parad|nao consigo trabalhar|nada funciona/.test(turn.user)
+        ? "parado"
+        : /reuniao|hoje|cliente|prazo|\d{1,2}h/.test(turn.user)
+          ? "compromisso_hoje"
+          : "contornavel";
     const problem =
       turn.earlierUser.find((t) => /vpn/.test(t)) ?? turn.earlierUser.at(-1) ?? turn.user;
     const windows = /windows 11|win 11/.test([...turn.earlierUser, turn.user].join(" "))
@@ -363,6 +436,9 @@ type TicketSummary = {
   ultimaAtualizacao: string;
 };
 
+const URGENCY_HINT =
+  /parad|nao consigo trabalhar|nada funciona|reuniao|hoje|cliente|prazo|\d{1,2}h|contorn|alternativa|sem urgencia/;
+
 const STATUS: Record<string, string> = {
   aguardando_analista: "Aguardando analista",
   em_andamento: "Em andamento",
@@ -377,11 +453,10 @@ const PRIORITY: Record<string, string> = {
   baixa: "baixa",
 };
 
-function describeTicket(t: TicketSummary, offerAnalyst = false): string {
+function describeTicket(t: TicketSummary): string {
   const base = `${t.numero} · ${t.titulo}: ${STATUS[t.status] ?? t.status}, prioridade ${PRIORITY[t.prioridade] ?? t.prioridade}.`;
   if (t.vencido) {
-    const offer = offerAnalyst ? " Quer que eu chame um analista?" : "";
-    return `${base} Está sem atualização desde ${formatDate(t.ultimaAtualizacao)} e o prazo venceu em ${formatDate(t.prazo)}.${offer}`;
+    return `O ${t.numero} está sem atualização desde ${formatDate(t.ultimaAtualizacao)} e o prazo de resposta venceu em ${formatDate(t.prazo)}.`;
   }
   return t.prazo ? `${base} A próxima resposta está prevista até ${formatDate(t.prazo)}.` : base;
 }
@@ -506,10 +581,20 @@ function readTurn(prompt: LanguageModelV4Prompt): Turn {
   const raw = textOf(lastUser);
   const earlierUser: string[] = [];
   let lastAgentText = "";
+  let lastQuestion = "";
   prompt.forEach((m, i) => {
     if (i >= lastUser) return;
-    if (m.role === "user") earlierUser.push(normalize(textOf(i)));
-    if (m.role === "assistant" && textOf(i).trim()) lastAgentText = textOf(i);
+    if (m.role === "user") {
+      earlierUser.push(normalize(textOf(i)));
+      lastQuestion = "";
+    }
+    if (m.role !== "assistant") return;
+    if (textOf(i).trim()) lastAgentText = textOf(i);
+    for (const part of m.content) {
+      if (part.type === "tool-call" && part.toolName === "perguntar") {
+        lastQuestion = normalize(String(inputOf(part.input).pergunta ?? ""));
+      }
+    }
   });
 
   const results = new Map<string, Record<string, unknown>>();
@@ -527,7 +612,19 @@ function readTurn(prompt: LanguageModelV4Prompt): Turn {
     raw,
     earlierUser,
     lastAgentText,
+    lastQuestion,
     results,
     system: system?.role === "system" ? system.content : "",
   };
+}
+
+function inputOf(input: unknown): Record<string, unknown> {
+  if (typeof input === "string") {
+    try {
+      return JSON.parse(input) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return (input ?? {}) as Record<string, unknown>;
 }
