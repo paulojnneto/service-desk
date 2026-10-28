@@ -1,10 +1,15 @@
 # Stage 04 — Domain and ticket service: PRD
 
-|        |                                                            |
-| ------ | ---------------------------------------------------------- |
-| Issue  | [#4](https://github.com/paulojnneto/service-desk/issues/4) |
-| Status | Approved (2026-10-28)                                      |
-| Covers | M4, R1, R2, R5, R7, R9, N5, N6 (tickets), N7               |
+|        |                                                                                |
+| ------ | ------------------------------------------------------------------------------ |
+| Issue  | [#4](https://github.com/paulojnneto/service-desk/issues/4)                     |
+| Status | Revision 2 — approved on 2026-10-28 (revision 1 approved earlier the same day) |
+| Covers | M4, R1, R2, R5, R7, R9, N5, N6 (tickets), N7                                   |
+
+## Changes in revision 2
+
+- **Service authentication (decision 8):** the API calls the ticket service with a short-lived JWT signed with ES256, which carries the requester, instead of a fixed service key and a requester header. S-04.16 changes and S-04.20 is new; one acceptance criterion changes and two are new.
+- The browser session stays as it is (the sealed cookie from Stage 3).
 
 ## Problem
 
@@ -22,27 +27,28 @@ At the end of this stage, a separate ticket service stores tickets and help cent
 
 ## Requirements
 
-| ID      | Requirement                                                                                                                                                                                                 | Source      |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| S-04.1  | PostgreSQL runs locally through Docker Compose with one command. The ticket service has its own database; the API's database is created too, for Stage 5                                                    | N6, N7, N8  |
-| S-04.2  | The schema is versioned in migrations, applied with one command; another command loads the sample data                                                                                                      | N7, N9      |
-| S-04.3  | A ticket has a number (`INC-…` or `REQ-…`), type, title, description, category, priority, who is affected, status, requester, and the times it was opened, last updated and resolved                        | R1, R2, R3  |
-| S-04.4  | Each ticket keeps a history of events: opened, updated with new information, status changed, reopened and transferred to an analyst, each with its time and author                                          | A1, R6      |
-| S-04.5  | Deadlines follow R9: critical in 1 hour (any time), high in 4 business hours, medium in 3 business days, low in 5 business days. Business hours are Monday to Friday, 8 a.m. to 6 p.m., São Paulo time      | R9          |
-| S-04.6  | The deadline counts from the last update, for the first response and for each update. An open ticket past its deadline is overdue; resolved and closed tickets are never overdue                            | R9, F2      |
-| S-04.7  | Every request to the service names the requester. A ticket is only returned, changed or reopened for the person who opened it; for anyone else, the service answers as if it did not exist                  | R7, N11     |
-| S-04.8  | The service lists the requester's tickets (open ones first) and returns one ticket with its history                                                                                                         | F2, M4      |
-| S-04.9  | The service creates a ticket only with every field from R3 filled and valid. Repeating the same creation request (same idempotency key) returns the ticket created the first time instead of a duplicate    | R3, R4, N5  |
-| S-04.10 | The service adds new information to an open ticket, which counts as an update for the deadline                                                                                                              | F3          |
-| S-04.11 | The service reopens a ticket resolved up to 7 days ago; after that, or for a ticket that is not resolved, it refuses with a clear reason                                                                    | R5          |
-| S-04.12 | The service records a transfer to an analyst as an event, with the case summary                                                                                                                             | R6          |
-| S-04.13 | The help center has 5 to 10 short articles in Portuguese, including VPN error 809 (Windows 10 only) and the service desk hours, and can be searched by words                                                | F1, Annex B |
-| S-04.14 | Sample data covers the Annex B situations: open and overdue, approved, resolved recently (can be reopened), resolved long ago (cannot), and tickets of other employees. Dates are relative to the seed time | Annex B     |
-| S-04.15 | The service simulates the legacy system: it sometimes answers slowly or is unavailable for a few seconds. The behavior is configurable and can be turned off                                                | N5          |
-| S-04.16 | Only the API can call the service: requests without the service key are refused, and the browser never calls it directly                                                                                    | N11         |
-| S-04.17 | A typed client, used by the agent from Stage 6, sets a timeout on every call, retries when the service is briefly unavailable, and reports a clear error when it stays down                                 | N5          |
-| S-04.18 | Data survives restarting the service and the database container                                                                                                                                             | N6          |
-| S-04.19 | The README explains how to start the database, run the migrations and load the sample data                                                                                                                  | N7          |
+| ID      | Requirement                                                                                                                                                                                                                                                                                 | Source      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| S-04.1  | PostgreSQL runs locally through Docker Compose with one command. The ticket service has its own database; the API's database is created too, for Stage 5                                                                                                                                    | N6, N7, N8  |
+| S-04.2  | The schema is versioned in migrations, applied with one command; another command loads the sample data                                                                                                                                                                                      | N7, N9      |
+| S-04.3  | A ticket has a number (`INC-…` or `REQ-…`), type, title, description, category, priority, who is affected, status, requester, and the times it was opened, last updated and resolved                                                                                                        | R1, R2, R3  |
+| S-04.4  | Each ticket keeps a history of events: opened, updated with new information, status changed, reopened and transferred to an analyst, each with its time and author                                                                                                                          | A1, R6      |
+| S-04.5  | Deadlines follow R9: critical in 1 hour (any time), high in 4 business hours, medium in 3 business days, low in 5 business days. Business hours are Monday to Friday, 8 a.m. to 6 p.m., São Paulo time                                                                                      | R9          |
+| S-04.6  | The deadline counts from the last update, for the first response and for each update. An open ticket past its deadline is overdue; resolved and closed tickets are never overdue                                                                                                            | R9, F2      |
+| S-04.7  | Every request to the service names the requester. A ticket is only returned, changed or reopened for the person who opened it; for anyone else, the service answers as if it did not exist                                                                                                  | R7, N11     |
+| S-04.8  | The service lists the requester's tickets (open ones first) and returns one ticket with its history                                                                                                                                                                                         | F2, M4      |
+| S-04.9  | The service creates a ticket only with every field from R3 filled and valid. Repeating the same creation request (same idempotency key) returns the ticket created the first time instead of a duplicate                                                                                    | R3, R4, N5  |
+| S-04.10 | The service adds new information to an open ticket, which counts as an update for the deadline                                                                                                                                                                                              | F3          |
+| S-04.11 | The service reopens a ticket resolved up to 7 days ago; after that, or for a ticket that is not resolved, it refuses with a clear reason                                                                                                                                                    | R5          |
+| S-04.12 | The service records a transfer to an analyst as an event, with the case summary                                                                                                                                                                                                             | R6          |
+| S-04.13 | The help center has 5 to 10 short articles in Portuguese, including VPN error 809 (Windows 10 only) and the service desk hours, and can be searched by words                                                                                                                                | F1, Annex B |
+| S-04.14 | Sample data covers the Annex B situations: open and overdue, approved, resolved recently (can be reopened), resolved long ago (cannot), and tickets of other employees. Dates are relative to the seed time                                                                                 | Annex B     |
+| S-04.15 | The service simulates the legacy system: it sometimes answers slowly or is unavailable for a few seconds. The behavior is configurable and can be turned off                                                                                                                                | N5          |
+| S-04.16 | Only the API can call the service: every request must carry a valid token issued by the API, and the browser never calls the service directly                                                                                                                                               | N11         |
+| S-04.17 | A typed client, used by the agent from Stage 6, sets a timeout on every call, retries when the service is briefly unavailable, and reports a clear error when it stays down                                                                                                                 | N5          |
+| S-04.18 | Data survives restarting the service and the database container                                                                                                                                                                                                                             | N6          |
+| S-04.19 | The README explains how to start the database, run the migrations and load the sample data                                                                                                                                                                                                  | N7          |
+| S-04.20 | The token is a JWT signed by the API with ES256 (the API keeps the private key; the service only has the public key). It carries the requester, the issuer, the audience and an expiry of at most 60 seconds. The service validates all of them and takes the requester only from the token | N11, R7     |
 
 ## Acceptance criteria
 
@@ -56,7 +62,9 @@ At the end of this stage, a separate ticket service stores tickets and help cent
 - [ ] A transfer is recorded in the ticket's history with its summary.
 - [ ] Searching the help center for "VPN 809" finds the VPN article; searching for "horário" finds the hours article.
 - [ ] With the simulated instability on, some requests are slow or fail; with it off, none do.
-- [ ] A request without the service key is refused.
+- [ ] A request without a token, with an expired token, with a token signed by another key, with another audience or with an algorithm other than ES256 is refused.
+- [ ] The requester comes only from the token: a requester sent any other way is ignored.
+- [ ] The service has no way to issue tokens: it holds only the public key.
 - [ ] The client recovers from a short outage within its retries, and reports a clear error when the service stays down; a creation retried by the client does not create two tickets.
 - [ ] Restarting the service and the database keeps the data.
 - [ ] Lint, typecheck, tests, build and CI pass.
@@ -76,7 +84,7 @@ At the end of this stage, a separate ticket service stores tickets and help cent
 
 ## Decisions
 
-Resolved on 2026-10-28, all following the recommendation: statuses "Aguardando analista", "Em andamento", "Aprovado", "Resolvido" and "Fechado" (open means not resolved or closed); the help center lives in the ticket service; reopening within 7 calendar days; business hours in `America/Sao_Paulo`; one number sequence per type continuing the sample data; simulated instability on in development at a low rate and off in tests; only the API calls the service, with a service key.
+Resolved on 2026-10-28, all following the recommendation: statuses "Aguardando analista", "Em andamento", "Aprovado", "Resolvido" and "Fechado" (open means not resolved or closed); the help center lives in the ticket service; reopening within 7 calendar days; business hours in `America/Sao_Paulo`; one number sequence per type continuing the sample data; simulated instability on in development at a low rate and off in tests; only the API calls the service (decision 8 replaces the service key with a signed JWT).
 
 ## Open questions (resolved)
 
@@ -86,4 +94,8 @@ Resolved on 2026-10-28, all following the recommendation: statuses "Aguardando a
 4. **Time zone.** _(Recommended: business hours in São Paulo time, `America/Sao_Paulo`, whatever the server's time zone.)_
 5. **Ticket numbers.** _(Recommended: one sequence per type, continuing the sample data: incidents after INC-20311, requests after REQ-10442.)_
 6. **Default instability.** _(Recommended: on in development at a low rate, so the client's retries are exercised every day; off in automated tests unless a test turns it on.)_
-7. **Who may call the service.** _(Recommended: only the API, with a service key; the browser never calls it, so the requester always comes from the API's session.)_
+7. **Who may call the service.** _(Recommended: only the API, with a service key; the browser never calls it, so the requester always comes from the API's session.)_ Replaced by decision 8.
+
+## Decision 8 (revision 2)
+
+8. **Service authentication:** a JWT signed with ES256 on every call from the API to the ticket service, carrying the requester (`sub`), the issuer, the audience and a short expiry. Requested on 2026-10-28 so that the service trusts a validated token instead of a requester ID it cannot verify. An asymmetric key means the service can check tokens but never create them. The browser session keeps the sealed cookie from Stage 3, which already meets the challenge (encrypted, signed, HTTP-only).
