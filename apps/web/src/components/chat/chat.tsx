@@ -223,7 +223,7 @@ export function Chat({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col justify-end gap-5 px-6 pt-7 pb-1 sm:px-10">
+        <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col justify-end gap-5 px-4 pt-7 pb-1 sm:px-10">
           {messages.length === 0 && <Welcome firstName={firstName} onPick={send} disabled={busy} />}
           {messages.map((message) => {
             if (message.role === "user") return <UserMessage key={message.id} message={message} />;
@@ -251,7 +251,7 @@ export function Chat({
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[920px] flex-col gap-1.5 px-6 pt-2.5 pb-[18px] sm:px-10">
+      <div className="mx-auto flex w-full max-w-[920px] flex-col gap-1.5 px-4 pt-2.5 pb-[18px] sm:px-10">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -269,7 +269,7 @@ export function Chat({
             placeholder={limitReached ? "Limite de mensagens atingido" : "Escreva para o Nexo…"}
             disabled={limitReached}
             autoComplete="off"
-            className="h-full flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed"
+            className="h-full min-w-0 flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
