@@ -33,6 +33,7 @@ export function toConversationView(
     employeeMessages: conversation.employeeMessages,
     limit: MESSAGES_PER_SESSION,
     startedAt: conversation.startedAt.toISOString(),
+    pendingDraftId: null,
     messages: rows.map(toStoredMessage),
   };
 }
