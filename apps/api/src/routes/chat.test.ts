@@ -1,10 +1,13 @@
 import { findPersonById, type Person } from "@nexo/shared";
-import { describe, expect, it } from "vitest";
-import { createApp } from "../app";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createTestApp, signIn } from "../test-app";
 import { buildChatParams } from "./chat";
 
 // The tests run without NEXO_AGENT_MODEL, so the agent uses the simulated model.
-const app = createApp();
+let app: Awaited<ReturnType<typeof createTestApp>>["app"];
+beforeEach(async () => {
+  ({ app } = await createTestApp());
+});
 
 const userMessage = {
   id: "m1",
@@ -13,12 +16,7 @@ const userMessage = {
 };
 
 async function cookieFor(email: string) {
-  const res = await app.request("/api/auth/sign-in", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: "anything" }),
-  });
-  return (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+  return (await signIn(app, email)).cookie;
 }
 
 function chat(body: string, cookie?: string) {

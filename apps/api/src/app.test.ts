@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createTestApp } from "./test-app";
 
 describe("agent API", () => {
-  const app = createApp();
+  let app: Awaited<ReturnType<typeof createTestApp>>["app"];
+  beforeEach(async () => {
+    ({ app } = await createTestApp());
+  });
 
   it("answers the health check", async () => {
     const res = await app.request("/health");
