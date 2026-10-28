@@ -8,6 +8,13 @@
       "when": 1793194203642,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793200909698,
+      "tag": "0001_drafts_and_decisions",
+      "breakpoints": true
     }
   ]
 }

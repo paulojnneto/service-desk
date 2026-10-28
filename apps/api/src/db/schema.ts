@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  pgSequence,
   pgTable,
   text,
   timestamp,
@@ -74,4 +75,69 @@ export const sessions = pgTable(
     expiresAt: moment("expires_at").notNull(),
   },
   (t) => [index("sessions_expires_idx").on(t.expiresAt)],
+);
+
+// Drafts shown as "D-381"; the numbering starts where the prototype's example does.
+export const draftNumberSeq = pgSequence("draft_number_seq", { startWith: 381 });
+
+// Every creation, update and reopening starts as a draft (stage 6 PRD, S-06.4). Only the
+// confirm route turns it into a write in the ticket service.
+export const drafts = pgTable(
+  "drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    number: integer("number")
+      .notNull()
+      .default(sql`nextval('draft_number_seq')`),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    employeeId: text("employee_id").notNull(),
+    kind: text("kind").notNull(),
+    // The ticket an update or reopening is about; null for a creation.
+    ticketNumber: text("ticket_number"),
+    fields: jsonb("fields").notNull(),
+    // Open tickets of the same category, shown before confirming (R4).
+    duplicates: jsonb("duplicates").notNull().default([]),
+    status: text("status").notNull().default("pending"),
+    // The ticket number written when confirmed.
+    resultTicket: text("result_ticket"),
+    createdAt: moment("created_at").notNull(),
+    decidedAt: moment("decided_at"),
+  },
+  (t) => [
+    // At most one draft waiting per conversation (S-06.6).
+    uniqueIndex("drafts_one_pending_idx")
+      .on(t.conversationId)
+      .where(sql`${t.status} in ('pending', 'confirming')`),
+    check("drafts_kind_check", sql`${t.kind} in ('create', 'update', 'reopen')`),
+    check(
+      "drafts_status_check",
+      sql`${t.status} in ('pending', 'confirming', 'confirmed', 'cancelled', 'superseded')`,
+    ),
+  ],
+);
+
+// The decision record of each agent reply (stage 6 PRD, S-06.13).
+export const decisions = pgTable(
+  "decisions",
+  {
+    messageId: uuid("message_id")
+      .primaryKey()
+      .references(() => messages.id),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    intent: text("intent").notNull(),
+    action: text("action").notNull(),
+    confidence: text("confidence").notNull(),
+    rationale: text("rationale").notNull(),
+    rules: text("rules").array().notNull(),
+    tools: jsonb("tools").notNull(),
+    createdAt: moment("created_at").notNull(),
+  },
+  (t) => [
+    index("decisions_conversation_idx").on(t.conversationId),
+    check("decisions_confidence_check", sql`${t.confidence} in ('alta', 'media', 'baixa')`),
+  ],
 );

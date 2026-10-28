@@ -14,5 +14,7 @@ export async function createTestDb(): Promise<Db> {
 
 // Empties every table: cheaper than migrating a new database for each test.
 export async function resetTestDb(db: Db) {
-  await db.execute(sql`truncate messages, conversations, sessions restart identity cascade`);
+  await db.execute(
+    sql`truncate decisions, drafts, messages, conversations, sessions restart identity cascade`,
+  );
 }
