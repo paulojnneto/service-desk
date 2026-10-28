@@ -186,7 +186,7 @@ interface AgentServices {
 ## Commit plan
 
 1. `docs(stage-06): approved PRD for the agent and service desk rules` (done)
-2. `docs(stage-06): tech spec and PRD revision 2 (handoff wording)`
+2. `docs(stage-06): tech spec and PRD revision 2 (handoff wording)` (done)
 3. `feat(shared): priority rule, decision record, drafts and out-of-scope channels`
 4. `feat(tickets-client): caller-provided idempotency keys`
 5. `feat(api): drafts and decisions tables`
@@ -214,3 +214,15 @@ Then a pull request "Stage 06 — Agent and service desk rules" with `Closes #6`
 ## Deviations during implementation
 
 Recorded after the code, before the pull request.
+
+| Deviation                                                                                                                                                                                                             | Why                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Commits 6, 7 and 8 became one: `feat: agent tools with read-only services and a decision record on every reply`                                                                                                       | `requestContextFor` changed shape, so the agent package and the API had to change together for every commit to typecheck          |
+| Actions written by the confirm route are in Portuguese (`criou_chamado`, `atualizou_chamado`, `reabriu_chamado`, `cancelou_rascunho`), and their tools are named `criarChamado`, `atualizarChamado`, `reabrirChamado` | Same language as the other actions and tools in the record, which Stages 8 and 9 show in Portuguese                               |
+| A repeated confirmation of a confirmed draft answers `200` with the draft and `message: null`                                                                                                                         | The draft carries the ticket number; finding the first reply again would need a link from draft to message that nothing else uses |
+| A handoff about a closed ticket still hands off, without the transfer event                                                                                                                                           | The ticket service refuses events on closed tickets; the employee asked for an analyst and should get one                         |
+| A draft id that is not a UUID answers `404`                                                                                                                                                                           | Without the check, PostgreSQL rejects the cast and the route would answer `503`                                                   |
+| A refusal of any kind from the ticket service on confirm (conflict, not found, invalid input) closes the draft with an explanation                                                                                    | The spec named only conflicts; all three mean the same draft will not work if sent again                                          |
+| In API tests the in-process ticket service has no retries and a switch that makes it answer `503`                                                                                                                     | Fast tests and a deterministic outage for S-06.16                                                                                 |
+| Risk resolved: Mastra's `requestContext` hands live objects (the services) to the tools                                                                                                                               | The end-to-end flow tests run every tool through the real agent with the services built by the API                                |
+| `draftOf` lives in its own file in the web app                                                                                                                                                                        | The React Fast Refresh lint rule forbids non-component exports from component files                                               |
