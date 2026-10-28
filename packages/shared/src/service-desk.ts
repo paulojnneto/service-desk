@@ -6,7 +6,14 @@ import { z } from "zod";
 export const TicketType = z.enum(["INC", "REQ"]);
 export type TicketType = z.infer<typeof TicketType>;
 
-export const Category = z.enum(["Acesso", "Rede e VPN", "Hardware", "Software", "E-mail", "Outros"]);
+export const Category = z.enum([
+  "Acesso",
+  "Rede e VPN",
+  "Hardware",
+  "Software",
+  "E-mail",
+  "Outros",
+]);
 export type Category = z.infer<typeof Category>;
 
 export const Priority = z.enum(["critica", "alta", "media", "baixa"]);

@@ -1,0 +1,4 @@
+pnpm-lock.yaml
+docs/prototype/
+**/.next/
+**/next-env.d.ts

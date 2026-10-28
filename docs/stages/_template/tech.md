@@ -1,10 +1,10 @@
 # Stage NN — Name: tech spec
 
-| | |
-| --- | --- |
-| Issue | #N |
-| PRD | `prd.md` (approved on YYYY-MM-DD) |
-| Status | Draft / Approved |
+|        |                                   |
+| ------ | --------------------------------- |
+| Issue  | #N                                |
+| PRD    | `prd.md` (approved on YYYY-MM-DD) |
+| Status | Draft / Approved                  |
 
 ## Solution overview
 
@@ -13,12 +13,12 @@ How the stage meets the requirements, in a few paragraphs. A diagram when it hel
 ## Files and modules
 
 | Path | What changes | Why |
-| --- | --- | --- |
+| ---- | ------------ | --- |
 
 ## Decisions
 
 | Decision | Choice | Alternatives considered | Reason |
-| --- | --- | --- | --- |
+| -------- | ------ | ----------------------- | ------ |
 
 ## Contracts
 
@@ -31,7 +31,7 @@ What can fail and how each failure shows up for the user and in the logs.
 ## Test plan
 
 | What | Type | Why it is worth testing |
-| --- | --- | --- |
+| ---- | ---- | ----------------------- |
 
 How to manually validate each acceptance criterion from the PRD.
 

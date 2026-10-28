@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
 import { ArrowUp, Check, LoaderCircle } from "lucide-react";
 
-// Rótulo de cada tool na linha de ações acima da resposta do agent.
+// Label of each tool in the action line above the agent's reply.
 const ACTION_LABELS: Record<string, string> = {
   consultarHorario: "consultou o horário do service desk",
 };
@@ -96,7 +96,11 @@ function AgentMessage({ message }: { message: UIMessage }) {
           const done = part.state === "output-available";
           return (
             <span key={part.toolCallId} className="flex items-center gap-1 text-[#5B6472]">
-              {done ? <Check className="size-3" /> : <LoaderCircle className="size-3 animate-spin" />}
+              {done ? (
+                <Check className="size-3" />
+              ) : (
+                <LoaderCircle className="size-3 animate-spin" />
+              )}
               {ACTION_LABELS[name] ?? name}
             </span>
           );

@@ -1,9 +1,9 @@
 # Stage NN — Name: PRD
 
-| | |
-| --- | --- |
-| Issue | #N |
-| Status | Draft / Approved |
+|        |                                            |
+| ------ | ------------------------------------------ |
+| Issue  | #N                                         |
+| Status | Draft / Approved                           |
 | Covers | IDs from the product PRD (e.g. F2, M4, R7) |
 
 ## Problem
@@ -16,9 +16,9 @@ One or two sentences on what changes at the end of the stage.
 
 ## Requirements
 
-| ID | Requirement | Source |
-| --- | --- | --- |
-| S-NN.1 | | Product PRD, section X |
+| ID     | Requirement | Source                 |
+| ------ | ----------- | ---------------------- |
+| S-NN.1 |             | Product PRD, section X |
 
 ## Acceptance criteria
 

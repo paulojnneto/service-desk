@@ -1,10 +1,10 @@
 # PRD — Nexo Assist
 
-| | |
-| --- | --- |
-| Status | Approved (2026-10-27) |
-| Version | 0.1 (2026-10-27) |
-| Source | Technical challenge "Nexo Assist, the IT service desk agent" (hiring process PRD) and Pencil prototype |
+|         |                                                                                                        |
+| ------- | ------------------------------------------------------------------------------------------------------ |
+| Status  | Approved (2026-10-27)                                                                                  |
+| Version | 0.1 (2026-10-27)                                                                                       |
+| Source  | Technical challenge "Nexo Assist, the IT service desk agent" (hiring process PRD) and Pencil prototype |
 
 This document turns the challenge into a product with traceable requirements and splits the delivery into stages. Each stage becomes a GitHub issue and gets its own PRD and tech spec under `docs/stages/` (see section 10).
 
@@ -20,87 +20,87 @@ Nexo has about 2,000 employees and currently opens IT tickets through a form. Th
 
 Build **Nexo Assist**, a support agent in a chat. Employees describe the problem in their own words, and the agent looks up their tickets, searches the help center, opens or updates tickets, and calls an analyst when needed.
 
-| Challenge metric | How the prototype demonstrates it |
-| --- | --- |
-| **Resolution without a queue** | Questions answered from the help center, without opening a ticket |
-| **Well-formed tickets** | Tickets created only after the draft is confirmed, complete and without duplicates |
-| **Right routing** | Handoff with a summary in the cases listed in section 5 (R6) |
-| **Transparency** | Every reply shows what the agent did, what it understood, how confident it was, and why |
+| Challenge metric               | How the prototype demonstrates it                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| **Resolution without a queue** | Questions answered from the help center, without opening a ticket                       |
+| **Well-formed tickets**        | Tickets created only after the draft is confirmed, complete and without duplicates      |
+| **Right routing**              | Handoff with a summary in the cases listed in section 5 (R6)                            |
+| **Transparency**               | Every reply shows what the agent did, what it understood, how confident it was, and why |
 
 ## 3. Personas and user stories
 
 **Nexo employee**, who signs in with their corporate email:
 
-| ID | Story |
-| --- | --- |
-| F1 | Get an answer to a question without opening a ticket |
-| F2 | Know the status of one of my tickets, even without remembering its number, and whether it is overdue |
-| F3 | Add new information to an open ticket |
-| F4 | Open a ticket just by chatting, reviewing the details before it is created |
-| F5 | Talk to an analyst when I prefer to, or when the problem is serious |
-| F6 | Come back another day and pick up where I left off |
+| ID  | Story                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------- |
+| F1  | Get an answer to a question without opening a ticket                                                 |
+| F2  | Know the status of one of my tickets, even without remembering its number, and whether it is overdue |
+| F3  | Add new information to an open ticket                                                                |
+| F4  | Open a ticket just by chatting, reviewing the details before it is created                           |
+| F5  | Talk to an analyst when I prefer to, or when the problem is serious                                  |
+| F6  | Come back another day and pick up where I left off                                                   |
 
 **Service desk analyst** (Tier 1 and Tier 2 support):
 
-| ID | Story |
-| --- | --- |
-| A1 | Receive tickets with the right type, category and priority, and a description that does not require asking everything again |
-| A2 | See the conversations that need me, including those where the agent was not confident enough to decide |
-| A3 | Take over a conversation with the agent paused, then hand it back to the agent or close it when I am done |
+| ID  | Story                                                                                                                       |
+| --- | --------------------------------------------------------------------------------------------------------------------------- |
+| A1  | Receive tickets with the right type, category and priority, and a description that does not require asking everything again |
+| A2  | See the conversations that need me, including those where the agent was not confident enough to decide                      |
+| A3  | Take over a conversation with the agent paused, then hand it back to the agent or close it when I am done                   |
 
 ## 4. Functional scope
 
-| ID | Module | Summary | Prototype screen |
-| --- | --- | --- | --- |
-| M1 | Sign-in | Corporate email and password; accepts the sample-data employees with any password | 1 |
-| M2 | Employee chat | Real-time replies, ticket cards, ticket picker, draft for confirmation, quick-reply options, limit of 30 messages per session | 2 and 3 |
-| M3 | Agent | Decides what to do on each message, using the help center and the ticket service, following the rules in section 5 | — |
-| M4 | Simulated ticket service | Separate from the agent; looks up, creates, updates and transfers tickets; has its own sample data | — |
-| M5 | Handoff to an analyst | The conversation is marked as waiting for an analyst, and the agent stops replying until it is released | 3 and 4 |
-| M6 | Analyst console | Conversation list with filters and status, history, take over (agent paused), hand back, close, panel with the employee's tickets | 4 and 5 |
-| M7 | Decision transparency | Actions above each reply and an easy-to-read detail: what it understood, which action it took, how confident it was, and why. **This is the most important part of the challenge.** | 2 and 3 |
+| ID  | Module                   | Summary                                                                                                                                                                             | Prototype screen |
+| --- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| M1  | Sign-in                  | Corporate email and password; accepts the sample-data employees with any password                                                                                                   | 1                |
+| M2  | Employee chat            | Real-time replies, ticket cards, ticket picker, draft for confirmation, quick-reply options, limit of 30 messages per session                                                       | 2 and 3          |
+| M3  | Agent                    | Decides what to do on each message, using the help center and the ticket service, following the rules in section 5                                                                  | —                |
+| M4  | Simulated ticket service | Separate from the agent; looks up, creates, updates and transfers tickets; has its own sample data                                                                                  | —                |
+| M5  | Handoff to an analyst    | The conversation is marked as waiting for an analyst, and the agent stops replying until it is released                                                                             | 3 and 4          |
+| M6  | Analyst console          | Conversation list with filters and status, history, take over (agent paused), hand back, close, panel with the employee's tickets                                                   | 4 and 5          |
+| M7  | Decision transparency    | Actions above each reply and an easy-to-read detail: what it understood, which action it took, how confident it was, and why. **This is the most important part of the challenge.** | 2 and 3          |
 
 The prototype (`nexo.pen` and the screenshots) is the visual reference: follow its layout and style, with freedom in the details.
 
 ## 5. Service desk rules (Annex A)
 
-| ID | Rule |
-| --- | --- |
-| R1 | **Types:** incident (INC), when something stopped or does not work; request (REQ), for access, equipment or software |
-| R2 | **Categories:** Access, Network and VPN, Hardware, Software, Email and Other |
-| R3 | **Creation:** every ticket has a title, description, type, category, priority and who is affected. The agent shows a draft and only creates or updates after the employee confirms |
-| R4 | **No duplicates:** if an open ticket already exists for the same problem, it is updated, not duplicated |
-| R5 | **Reopening:** tickets resolved up to 7 days ago can be reopened |
-| R6 | **Handoff:** when the employee asks, in critical cases, for overdue tickets, or when the agent is not confident. It carries a summary, and the agent does not reply while the conversation is with an analyst |
-| R7 | **Privacy:** ticket information is only shared with the person who opened it |
-| R8 | **Scope:** IT topics only. HR, finance and facilities are redirected |
-| R9 | **Priority and deadlines:** priority combines impact (how many people are affected) and urgency (whether a commitment is at risk). The deadline applies to the first response and to each update; past the deadline, the ticket is overdue |
+| ID  | Rule                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R1  | **Types:** incident (INC), when something stopped or does not work; request (REQ), for access, equipment or software                                                                                                                       |
+| R2  | **Categories:** Access, Network and VPN, Hardware, Software, Email and Other                                                                                                                                                               |
+| R3  | **Creation:** every ticket has a title, description, type, category, priority and who is affected. The agent shows a draft and only creates or updates after the employee confirms                                                         |
+| R4  | **No duplicates:** if an open ticket already exists for the same problem, it is updated, not duplicated                                                                                                                                    |
+| R5  | **Reopening:** tickets resolved up to 7 days ago can be reopened                                                                                                                                                                           |
+| R6  | **Handoff:** when the employee asks, in critical cases, for overdue tickets, or when the agent is not confident. It carries a summary, and the agent does not reply while the conversation is with an analyst                              |
+| R7  | **Privacy:** ticket information is only shared with the person who opened it                                                                                                                                                               |
+| R8  | **Scope:** IT topics only. HR, finance and facilities are redirected                                                                                                                                                                       |
+| R9  | **Priority and deadlines:** priority combines impact (how many people are affected) and urgency (whether a commitment is at risk). The deadline applies to the first response and to each update; past the deadline, the ticket is overdue |
 
-| Priority | When to use | Deadline |
-| --- | --- | --- |
-| Critical | Something is down for a team or for the company | 1 hour |
-| High | Prevents one person from working, or there is a commitment on the same day | 4 business hours |
-| Medium | Gets in the way, but there is a workaround | 3 business days |
-| Low | Requests and improvements with no urgency | 5 business days |
+| Priority | When to use                                                                | Deadline         |
+| -------- | -------------------------------------------------------------------------- | ---------------- |
+| Critical | Something is down for a team or for the company                            | 1 hour           |
+| High     | Prevents one person from working, or there is a commitment on the same day | 4 business hours |
+| Medium   | Gets in the way, but there is a workaround                                 | 3 business days  |
+| Low      | Requests and improvements with no urgency                                  | 5 business days  |
 
 The UI keeps the Portuguese names used by Nexo (for example "Rede e VPN", "Alta").
 
 ## 6. Non-functional requirements
 
-| ID | Requirement |
-| --- | --- |
-| N1 | TypeScript with strict typing |
-| N2 | Agent built with Mastra |
-| N3 | Any LLM provider, with the choice explained in the README |
-| N4 | UI follows the prototype, with care for loading and error states |
-| N5 | Ticket service separate from the agent; the legacy system is occasionally unavailable for a few seconds |
-| N6 | Conversations, tickets and each conversation's state (with the agent or with an analyst) survive an application restart |
-| N7 | Runs locally with a few commands documented in the README, and ships an `.env.example` |
-| N8 | Clear architecture: UI, agent and services separated, with justified decisions |
-| N9 | Organized code, tests where they matter, error handling, and commits that tell the story |
-| N10 | Fast responses and mindful model usage, considering cost per conversation |
-| N11 | Keys kept out of the code; one employee's tickets are never exposed to another |
-| N12 | Bonus: deployment with protected keys and usage limits |
+| ID  | Requirement                                                                                                             |
+| --- | ----------------------------------------------------------------------------------------------------------------------- |
+| N1  | TypeScript with strict typing                                                                                           |
+| N2  | Agent built with Mastra                                                                                                 |
+| N3  | Any LLM provider, with the choice explained in the README                                                               |
+| N4  | UI follows the prototype, with care for loading and error states                                                        |
+| N5  | Ticket service separate from the agent; the legacy system is occasionally unavailable for a few seconds                 |
+| N6  | Conversations, tickets and each conversation's state (with the agent or with an analyst) survive an application restart |
+| N7  | Runs locally with a few commands documented in the README, and ships an `.env.example`                                  |
+| N8  | Clear architecture: UI, agent and services separated, with justified decisions                                          |
+| N9  | Organized code, tests where they matter, error handling, and commits that tell the story                                |
+| N10 | Fast responses and mindful model usage, considering cost per conversation                                               |
+| N11 | Keys kept out of the code; one employee's tickets are never exposed to another                                          |
+| N12 | Bonus: deployment with protected keys and usage limits                                                                  |
 
 ## 7. Assumptions and product decisions
 
@@ -121,20 +121,20 @@ The UI keeps the Portuguese names used by Nexo (for example "Rede e VPN", "Alta"
 
 Each stage is an issue. The criteria below are a summary; the details live in the stage's PRD and tech spec.
 
-| # | Stage | Issue | Covers | Status |
-| --- | --- | --- | --- | --- |
-| 1 | Hello world | [#1](https://github.com/paulojnneto/service-desk/issues/1) | N2, N3 | Done |
-| 2 | Project skeleton | [#2](https://github.com/paulojnneto/service-desk/issues/2) | N1, N7, N8, N9 | To do |
-| 3 | Sign-in and employee shell | [#3](https://github.com/paulojnneto/service-desk/issues/3) | M1, N11 | To do |
-| 4 | Domain and ticket service | [#4](https://github.com/paulojnneto/service-desk/issues/4) | M4, R7, R9, N5 | To do |
-| 5 | Conversation persistence | [#5](https://github.com/paulojnneto/service-desk/issues/5) | F6, N6 | To do |
-| 6 | Agent and service desk rules | [#6](https://github.com/paulojnneto/service-desk/issues/6) | M3, F1–F5, R1–R8 | To do |
-| 7 | Chat cards and flows | [#7](https://github.com/paulojnneto/service-desk/issues/7) | M2 | To do |
-| 8 | Decision transparency | [#8](https://github.com/paulojnneto/service-desk/issues/8) | M7 | To do |
-| 9 | Handoff and analyst console | [#9](https://github.com/paulojnneto/service-desk/issues/9) | M5, M6, A1–A3 | To do |
-| 10 | Decision quality (evals) | [#10](https://github.com/paulojnneto/service-desk/issues/10) | M3, M7 | To do |
-| 11 | Efficiency, resilience and security | [#11](https://github.com/paulojnneto/service-desk/issues/11) | N5, N10, N11 | To do |
-| 12 | Deployment and final README | [#12](https://github.com/paulojnneto/service-desk/issues/12) | N3, N7, N12 | To do |
+| #   | Stage                               | Issue                                                        | Covers           | Status |
+| --- | ----------------------------------- | ------------------------------------------------------------ | ---------------- | ------ |
+| 1   | Hello world                         | [#1](https://github.com/paulojnneto/service-desk/issues/1)   | N2, N3           | Done   |
+| 2   | Project skeleton                    | [#2](https://github.com/paulojnneto/service-desk/issues/2)   | N1, N7, N8, N9   | To do  |
+| 3   | Sign-in and employee shell          | [#3](https://github.com/paulojnneto/service-desk/issues/3)   | M1, N11          | To do  |
+| 4   | Domain and ticket service           | [#4](https://github.com/paulojnneto/service-desk/issues/4)   | M4, R7, R9, N5   | To do  |
+| 5   | Conversation persistence            | [#5](https://github.com/paulojnneto/service-desk/issues/5)   | F6, N6           | To do  |
+| 6   | Agent and service desk rules        | [#6](https://github.com/paulojnneto/service-desk/issues/6)   | M3, F1–F5, R1–R8 | To do  |
+| 7   | Chat cards and flows                | [#7](https://github.com/paulojnneto/service-desk/issues/7)   | M2               | To do  |
+| 8   | Decision transparency               | [#8](https://github.com/paulojnneto/service-desk/issues/8)   | M7               | To do  |
+| 9   | Handoff and analyst console         | [#9](https://github.com/paulojnneto/service-desk/issues/9)   | M5, M6, A1–A3    | To do  |
+| 10  | Decision quality (evals)            | [#10](https://github.com/paulojnneto/service-desk/issues/10) | M3, M7           | To do  |
+| 11  | Efficiency, resilience and security | [#11](https://github.com/paulojnneto/service-desk/issues/11) | N5, N10, N11     | To do  |
+| 12  | Deployment and final README         | [#12](https://github.com/paulojnneto/service-desk/issues/12) | N3, N7, N12      | To do  |
 
 ### Stage 1 — Hello world (done)
 
