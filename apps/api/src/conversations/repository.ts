@@ -91,7 +91,12 @@ export async function appendEmployeeMessage(
 export async function appendMessage(
   db: Db,
   employeeId: string,
-  message: { author: Exclude<MessageAuthor, "employee">; authorId?: string; parts: unknown[] },
+  message: {
+    id?: string;
+    author: Exclude<MessageAuthor, "employee">;
+    authorId?: string;
+    parts: unknown[];
+  },
   now: Date,
 ): Promise<MessageRow | null> {
   return db.transaction(async (tx) => {
@@ -105,6 +110,7 @@ export async function appendMessage(
     const [row] = await tx
       .insert(messages)
       .values({
+        ...(message.id ? { id: message.id } : {}),
         conversationId: open.id,
         author: message.author,
         authorId: message.authorId ?? null,
