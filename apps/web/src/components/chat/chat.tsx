@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useRevalidator } from "react-router";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { ArrowUp, LoaderCircle, RotateCcw } from "lucide-react";
-import { MESSAGES_PER_SESSION } from "@nexo/shared";
-import { AgentBubble, AgentMessage, QuickOption, StatusLine, UserMessage } from "./messages";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { ArrowUp, Headset, LoaderCircle, RotateCcw } from "lucide-react";
+import {
+  MESSAGES_PER_SESSION,
+  type ConversationState,
+  type ConversationView,
+  type MessageMetadata,
+} from "@nexo/shared";
+import {
+  AgentBubble,
+  AgentMessage,
+  QuickOption,
+  StatusLine,
+  SystemNote,
+  UserMessage,
+} from "./messages";
+import { NewConversation } from "./new-conversation";
 
 // Starting points for the empty chat (stage 3 PRD, decision 2).
 const SUGGESTIONS = [
@@ -13,17 +26,46 @@ const SUGGESTIONS = [
   "Quero abrir um chamado",
 ];
 
-export function Chat({ firstName }: { firstName: string }) {
+export type ChatMessage = UIMessage<MessageMetadata>;
+type StatePart = { state: ConversationState };
+
+export function Chat({
+  firstName,
+  conversation,
+}: {
+  firstName: string;
+  conversation: ConversationView | null;
+}) {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, regenerate, status, error } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+  const [state, setState] = useState<ConversationState>(conversation?.state ?? "with_agent");
+  const revalidator = useRevalidator();
+  const { messages, sendMessage, regenerate, status, error } = useChat<ChatMessage>({
+    // The history comes from the server (stage 5 PRD, S-05.5).
+    messages: (conversation?.messages ?? []) as ChatMessage[],
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      // Only the new message goes up; the server keeps the history (S-05.6).
+      prepareSendMessagesRequest: ({ messages: all }) => {
+        const last = all.findLast((message) => message.role === "user");
+        return { body: { message: last && { id: last.id, parts: last.parts } } };
+      },
+    }),
+    onData: (part) => {
+      if (part.type === "data-conversation-state") setState((part.data as StatePart).state);
+    },
+    onFinish: () => {
+      // The first message created the conversation: load it, so "Nova conversa" appears.
+      if (!conversation) void revalidator.revalidate();
+    },
   });
   const endRef = useRef<HTMLDivElement>(null);
 
   const busy = status === "submitted" || status === "streaming";
+  // Every stored message is in the list, so this is the count stored on the server.
   const sent = messages.filter((message) => message.role === "user").length;
-  // UI-only limit for now; Stage 5 enforces it on the server.
-  const limitReached = sent >= MESSAGES_PER_SESSION;
+  const limitReached =
+    sent >= MESSAGES_PER_SESSION || Boolean(error?.message.includes("message_limit_reached"));
+  const withServiceDesk = state === "waiting_analyst" || state === "with_analyst";
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -41,21 +83,28 @@ export function Chat({ firstName }: { firstName: string }) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col justify-end gap-5 px-6 pt-7 pb-1 sm:px-10">
           {messages.length === 0 && <Welcome firstName={firstName} onPick={send} disabled={busy} />}
-          {messages.map((message) =>
-            message.role === "user" ? (
-              <UserMessage key={message.id} message={message} />
-            ) : (
-              <AgentMessage key={message.id} message={message} />
-            ),
-          )}
-          {status === "submitted" && (
+          {messages.map((message) => {
+            if (message.role === "user") return <UserMessage key={message.id} message={message} />;
+            if (message.metadata?.author === "system") {
+              return <SystemNote key={message.id} message={message} />;
+            }
+            return <AgentMessage key={message.id} message={message} />;
+          })}
+          {status === "submitted" && !withServiceDesk && (
             <StatusLine>
               <span className="flex items-center gap-[5px] text-ink-3">
                 <LoaderCircle className="size-3 animate-spin" aria-hidden="true" /> pensando…
               </span>
             </StatusLine>
           )}
-          {error && <ChatError error={error} onRetry={() => regenerate()} />}
+          {withServiceDesk && <ServiceDeskBanner />}
+          {error && !limitReached && (
+            <ChatError
+              error={error}
+              onRetry={() => regenerate()}
+              onReload={() => window.location.reload()}
+            />
+          )}
           <div ref={endRef} />
         </div>
       </div>
@@ -88,11 +137,16 @@ export function Chat({ firstName }: { firstName: string }) {
             <ArrowUp className="size-3.5" aria-hidden="true" /> Enviar
           </button>
         </form>
-        <p className="flex justify-end text-[12.5px] text-ink-3" aria-live="polite">
-          {limitReached
-            ? `Você chegou ao limite de ${MESSAGES_PER_SESSION} mensagens desta sessão.`
-            : `${sent}/${MESSAGES_PER_SESSION} mensagens nesta sessão`}
-        </p>
+        <div className="flex justify-end text-[12.5px] text-ink-3" aria-live="polite">
+          {limitReached ? (
+            <span className="flex flex-wrap items-center justify-end gap-x-2">
+              Você chegou ao limite de {MESSAGES_PER_SESSION} mensagens desta conversa.
+              <NewConversation variant="inline" />
+            </span>
+          ) : (
+            `${sent}/${MESSAGES_PER_SESSION} mensagens nesta sessão`
+          )}
+        </div>
       </div>
     </div>
   );
@@ -127,9 +181,34 @@ function Welcome({
   );
 }
 
-function ChatError({ error, onRetry }: { error: Error; onRetry: () => void }) {
+// The agent is paused while the conversation is with the service desk (S-05.12).
+function ServiceDeskBanner() {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2.5 rounded-xl bg-violet-soft px-4 py-3 text-[13.5px] text-violet-text"
+    >
+      <Headset className="size-4 shrink-0" aria-hidden="true" />
+      <span>
+        Sua conversa está com a equipe de atendimento. Um analista responde por aqui; suas mensagens
+        já foram enviadas.
+      </span>
+    </div>
+  );
+}
+
+function ChatError({
+  error,
+  onRetry,
+  onReload,
+}: {
+  error: Error;
+  onRetry: () => void;
+  onReload: () => void;
+}) {
   // The transport puts the API's response body in the error message.
   const sessionExpired = error.message.includes("unauthenticated");
+  const alreadyAnswered = error.message.includes("already_answered");
   return (
     <div
       role="alert"
@@ -141,6 +220,13 @@ function ChatError({ error, onRetry }: { error: Error; onRetry: () => void }) {
           <Link to="/login" className="font-semibold underline">
             Entrar de novo
           </Link>
+        </>
+      ) : alreadyAnswered ? (
+        <>
+          <span>Essa mensagem já foi respondida, talvez em outra aba.</span>
+          <button type="button" onClick={onReload} className="font-semibold hover:underline">
+            Atualizar conversa
+          </button>
         </>
       ) : (
         <>

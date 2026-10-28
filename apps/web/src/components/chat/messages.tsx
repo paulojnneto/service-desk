@@ -1,3 +1,4 @@
+import type { MessageMetadata } from "@nexo/shared";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import { Check, LoaderCircle } from "lucide-react";
 
@@ -20,14 +21,17 @@ export function UserMessage({ message }: { message: UIMessage }) {
   );
 }
 
+// Replies from the agent, or from an analyst once the conversation is handed off (Stage 9).
 export function AgentMessage({ message }: { message: UIMessage }) {
   const tools = message.parts.filter(isToolUIPart);
   const text = messageText(message);
   if (!text && tools.length === 0) return null;
+  const metadata = message.metadata as MessageMetadata | undefined;
+  const name = metadata?.author === "analyst" ? (metadata.authorName ?? "Analista") : "Nexo Assist";
 
   return (
     <div className="flex flex-col gap-1.5">
-      <StatusLine>
+      <StatusLine name={name}>
         {tools.map((part) => (
           <span key={part.toolCallId} className="flex items-center gap-[5px] text-ink-3">
             {part.state === "output-available" ? (
@@ -44,11 +48,22 @@ export function AgentMessage({ message }: { message: UIMessage }) {
   );
 }
 
-// "Nexo Assist" followed by the actions the agent took for this reply.
-export function StatusLine({ children }: { children?: React.ReactNode }) {
+// Notes from the system, such as "conversa transferida" (Stage 9).
+export function SystemNote({ message }: { message: UIMessage }) {
+  return <p className="text-center text-[12.5px] text-ink-3">{messageText(message)}</p>;
+}
+
+// Who replied ("Nexo Assist" by default) followed by the actions taken for this reply.
+export function StatusLine({
+  children,
+  name = "Nexo Assist",
+}: {
+  children?: React.ReactNode;
+  name?: string;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
-      <span className="font-semibold text-ink">Nexo Assist</span>
+      <span className="font-semibold text-ink">{name}</span>
       {children}
     </div>
   );
