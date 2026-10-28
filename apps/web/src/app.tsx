@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, getToolName, type UIMessage } from "ai";
@@ -10,7 +8,7 @@ const ACTION_LABELS: Record<string, string> = {
   consultarHorario: "consultou o horário do service desk",
 };
 
-export default function Home() {
+export function App() {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),

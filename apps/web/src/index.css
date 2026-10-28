@@ -49,9 +49,10 @@
   --color-border-strong: #0b0b0b24;
 }
 
-@theme inline {
-  --font-sans: var(--font-schibsted);
-  --font-display: var(--font-newsreader);
+/* Font families loaded by the Fontsource imports in main.tsx. */
+@theme {
+  --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader Variable", ui-serif, Georgia, serif;
 }
 
 body {
