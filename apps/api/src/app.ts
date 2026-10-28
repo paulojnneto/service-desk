@@ -4,6 +4,7 @@ import { session, type AppEnv } from "./auth";
 import type { Db } from "./db/connect";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes, runNexoAssist, type RunAgent } from "./routes/chat";
+import { conversationRoutes } from "./routes/conversations";
 
 export type AppOptions = {
   db: Db;
@@ -28,6 +29,7 @@ export function createApp({ db, now = () => new Date(), runAgent = runNexoAssist
   app.use("/api/*", jsonOnlyPosts, session);
   app.route("/api/auth", authRoutes);
   app.route("/api/chat", chatRoutes);
+  app.route("/api/conversations", conversationRoutes);
 
   return app;
 }
