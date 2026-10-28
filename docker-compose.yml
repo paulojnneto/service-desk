@@ -1,5 +1,5 @@
 # Local PostgreSQL for development (stage 4 tech spec).
-# Host port 5433, because 5432 is often taken by a local PostgreSQL install.
+# Host port 55432, because 5432 and 5433 are often taken by local PostgreSQL installs.
 # The credentials are for local development only.
 services:
   postgres:
@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: nexo
       POSTGRES_PASSWORD: nexo
     ports:
-      - "5433:5432"
+      - "55432:5432"
     volumes:
       # PostgreSQL 18 images keep their data under /var/lib/postgresql/<version>.
       - pgdata:/var/lib/postgresql
