@@ -1,0 +1,19 @@
+{
+  "name": "@nexo/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "4.0.29",
+    "@mastra/core": "1.79.0",
+    "@nexo/shared": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

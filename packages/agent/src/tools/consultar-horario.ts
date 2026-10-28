@@ -1,8 +1,8 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-// Tool falsa do hello world: valida o caminho agent -> tool -> UI.
-// Os dados vêm do artigo de exemplo do Anexo B do desafio.
+// Sample tool from the hello world: proves the agent -> tool -> UI path.
+// The data comes from the sample article in Annex B of the challenge.
 export const consultarHorario = createTool({
   id: "consultar-horario-service-desk",
   description:

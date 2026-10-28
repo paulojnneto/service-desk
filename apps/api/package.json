@@ -1,0 +1,22 @@
+{
+  "name": "@nexo/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@mastra/ai-sdk": "1.11.2",
+    "@nexo/agent": "workspace:*",
+    "ai": "7.0.154",
+    "hono": "4.13.14"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}
