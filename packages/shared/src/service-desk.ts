@@ -19,6 +19,9 @@ export type Category = z.infer<typeof Category>;
 export const Priority = z.enum(["critica", "alta", "media", "baixa"]);
 export type Priority = z.infer<typeof Priority>;
 
+// Messages an employee can send in one chat session (cost and abuse control).
+export const MESSAGES_PER_SESSION = 30;
+
 type Sla = { label: string; amount: number; unit: "hours" | "business_hours" | "business_days" };
 
 // The deadline applies to the first response and to each update.
