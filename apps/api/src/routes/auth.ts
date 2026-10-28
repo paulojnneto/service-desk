@@ -22,8 +22,8 @@ export const authRoutes = new Hono<AppEnv>()
     await startSession(c, { userId: person.id, role: person.role }, parsed.data.remember);
     return c.json({ user: toSessionUser(person) });
   })
-  .post("/sign-out", (c) => {
-    endSession(c);
+  .post("/sign-out", async (c) => {
+    await endSession(c);
     return c.body(null, 204);
   })
   .get("/me", (c) => {

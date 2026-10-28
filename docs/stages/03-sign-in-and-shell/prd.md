@@ -28,7 +28,7 @@ At the end of this stage, a person from the sample directory signs in with their
 | S-03.3  | Any password signs in a directory email; the email is matched without regard to case or surrounding spaces                                                                                                                | M1                        |
 | S-03.4  | An unknown email or an empty field shows a clear error next to the form and keeps the email that was typed                                                                                                                | M1, N4                    |
 | S-03.5  | Signing in shows a pending state on the button and cannot be submitted twice                                                                                                                                              | N4                        |
-| S-03.6  | The session survives page reloads. With "keep me signed in" it lasts 30 days; without it, it lasts one workday (10 hours)                                                                                                 | M1                        |
+| S-03.6  | The session survives page reloads. With "keep me signed in" it lasts 30 days (7 days from Stage 5, S-05.18); without it, it lasts one workday (10 hours)                                                                  | M1                        |
 | S-03.7  | The session cannot be read or forged by browser code: it lives in an HTTP-only, signed and encrypted cookie that holds only the person's ID and role                                                                      | N11                       |
 | S-03.8  | Signing out ends the session and returns to the sign-in screen                                                                                                                                                            | M1                        |
 | S-03.9  | The API takes the person's identity only from the session, never from the request body. The chat route answers 401 without a session and 403 for analysts                                                                 | N11, base for R7          |
@@ -81,3 +81,7 @@ Resolved on 2026-10-27, all following the recommendation: a demo hint with sampl
 4. **Help links.** "Ligue no ramal 4000", "Esqueci minha senha" and "Redefinir senha" have nothing real behind them. _(Recommended: the phone link uses `tel:4000`; "Esqueci minha senha" shows a short hint that the password is the Nexo network password and IT resets it; "Redefinir senha" is disabled with the same hint.)_
 5. **Session durations.** 30 days with "keep me signed in" and 10 hours without it. _(Recommended: as listed; the shorter one covers a workday without asking to sign in again at lunch.)_
 6. **"Meu perfil" in scope.** The challenge does not list it, but the prototype has the frame and the sidebar links to it. _(Recommended: include it; it is a small, static screen and avoids a dead link.)_
+
+## Later decisions
+
+- **Stage 5 (2026-10-28):** "keep me signed in" lasts 7 days instead of 30, and sign-in sessions are stored on the server so signing out revokes them ([Stage 5 PRD](../05-conversation-persistence/prd.md), S-05.16 to S-05.18).

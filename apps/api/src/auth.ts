@@ -1,12 +1,23 @@
 import { findPersonById, initials, type Person, type Role, type SessionUser } from "@nexo/shared";
 import { createMiddleware } from "hono/factory";
+import type { Db } from "./db/connect";
+import type { RunAgent } from "./routes/chat";
 import { readSession } from "./session";
 
-export type AppEnv = { Variables: { person: Person | null } };
+export type AppEnv = {
+  Variables: { db: Db; now: () => Date; runAgent: RunAgent; person: Person | null };
+};
 
 // Turns the session cookie into a person. Identity never comes from the request body.
 export const session = createMiddleware<AppEnv>(async (c, next) => {
-  const data = await readSession(c);
+  let data;
+  try {
+    data = await readSession(c);
+  } catch (error) {
+    // A database blip must not look like being signed out.
+    console.error("Could not read the session:", error);
+    return c.json({ error: "unavailable" }, 503);
+  }
   const person = data ? findPersonById(data.userId) : undefined;
   // A cookie for someone no longer in the directory, or with a stale role, counts as no session.
   c.set("person", person && person.role === data?.role ? person : null);

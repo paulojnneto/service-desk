@@ -1,4 +1,4 @@
-import type { SessionUser } from "@nexo/shared";
+import type { ConversationView, SessionUser } from "@nexo/shared";
 
 // Calls to the agent API. Same origin: in development Vite forwards /api to it.
 
@@ -16,6 +16,27 @@ export async function fetchSessionUser(): Promise<SessionUser | null> {
   if (res.status === 401) return null;
   if (!res.ok) throw new ApiUnavailableError();
   return ((await res.json()) as { user: SessionUser }).user;
+}
+
+export class SignedOutError extends Error {
+  constructor() {
+    super("The session has ended");
+  }
+}
+
+// The employee's open conversation, or null before the first message (stage 5 PRD, S-05.5).
+export async function fetchCurrentConversation(): Promise<ConversationView | null> {
+  const res = await request("/api/conversations/current");
+  if (res.status === 401) throw new SignedOutError();
+  if (!res.ok) throw new ApiUnavailableError();
+  return ((await res.json()) as { conversation: ConversationView | null }).conversation;
+}
+
+// "Nova conversa": closes the open conversation.
+export async function closeConversation(): Promise<void> {
+  const res = await postJson("/api/conversations/current/close", {});
+  if (res.status === 401) throw new SignedOutError();
+  if (!res.ok) throw new ApiUnavailableError();
 }
 
 export async function signIn(input: {

@@ -8,6 +8,7 @@ import { AnalystLanding } from "./routes/analyst/landing";
 import { EmployeeLayout } from "./routes/employee/layout";
 import { ProfilePage } from "./routes/employee/profile";
 import { SupportPage } from "./routes/employee/support";
+import { supportAction, supportLoader } from "./routes/employee/support-data";
 import { signInAction } from "./routes/sign-in/action";
 import { SignInPage } from "./routes/sign-in/page";
 
@@ -39,7 +40,7 @@ export const router = createBrowserRouter([
     HydrateFallback: PageLoading,
     ErrorBoundary: RouteError,
     children: [
-      { index: true, Component: SupportPage },
+      { index: true, loader: supportLoader, action: supportAction, Component: SupportPage },
       { path: "perfil", Component: ProfilePage },
     ],
   },

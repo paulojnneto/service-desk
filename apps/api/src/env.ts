@@ -1,5 +1,13 @@
 import { existsSync } from "node:fs";
 
 // Loads apps/api/.env.local before any other module reads process.env.
-// It must be the first import of the server entry point: the agent picks its model on import.
+// It must be the first import of every entry point (server, migrate): the agent picks its model on import.
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
+
+const DEV_DATABASE_URL = "postgres://nexo:nexo@localhost:55432/nexo_api";
+
+export function databaseUrl(env = process.env): string {
+  if (env.DATABASE_URL) return env.DATABASE_URL;
+  if (env.NODE_ENV === "production") throw new Error("DATABASE_URL must be set in production.");
+  return DEV_DATABASE_URL;
+}
