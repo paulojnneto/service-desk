@@ -206,7 +206,8 @@ describe("simulated flows", () => {
     expect(answer).toContain("Não encontrei o REQ-10439");
     expect(answer).not.toContain("SAP");
     expect((await lastDecision())?.tools).toEqual([
-      { name: "consultarChamado", outcome: "nao_encontrado" },
+      // The number the employee typed, as for a ticket that does not exist (stage 8, S-08.9).
+      { name: "consultarChamado", outcome: "nao_encontrado", subject: "REQ-10439" },
     ]);
   });
 
