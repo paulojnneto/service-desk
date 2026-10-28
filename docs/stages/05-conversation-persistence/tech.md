@@ -173,7 +173,7 @@ The existing `auth.test.ts` and `chat.test.ts` move to `createApp({ db: await cr
 ## Commit plan
 
 1. `docs(stage-05): approved PRD for conversation persistence` (done)
-2. `docs(stage-05): tech spec for conversation persistence`
+2. `docs(stage-05): tech spec for conversation persistence` (done)
 3. `feat(shared): conversation contracts`
 4. `feat(api): database, schema and migrations for conversations and sessions`
 5. `feat(api): sign-in sessions stored in the database and revoked on sign-out`
@@ -199,3 +199,16 @@ Then a pull request "Stage 05 — Conversation persistence" with `Closes #5`.
 ## Deviations during implementation
 
 Recorded after the code, before the pull request.
+
+| Deviation                                                                                                                               | Why                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The reply is saved based on the route's own check (the stream reached its end and carried no `error` chunk), not on `onEnd`'s `outcome` | `createUIMessageStream` reports `outcome: "unknown"` unless the stream owner declares one, so "completed" never arrived. The route watches the agent's chunks with a `TransformStream` instead |
+| `createApp` takes an optional `runAgent` (defaults to the Mastra agent)                                                                 | Tests need an agent that fails mid-reply, that cannot start, and one whose input can be inspected; the simulated model cannot do the first two                                                 |
+| When the agent cannot start, the chat answers `503 unavailable` after saving the message                                                | Not listed in the error table; the UI already shows "Tentar de novo", and the resend is not counted twice                                                                                      |
+| States and authors are `text` columns with `check` constraints, not PostgreSQL enums                                                    | Same choice as the ticket service in Stage 4; adding a value later is a one-line migration                                                                                                     |
+| Tests share one PGlite database per test file and empty it before each test                                                             | Migrating a fresh database for every test made the API suite take about 25 s; truncating keeps it at about 4 s with the same isolation                                                         |
+| `already_answered` in the UI offers "Atualizar conversa", which reloads the page                                                        | `useChat` only reads its initial messages on mount, so reloading is the simplest way to show the reply saved from another tab                                                                  |
+| "Nova conversa" redirects to `/` after closing                                                                                          | Without it, React Router left `/?index` in the address bar                                                                                                                                     |
+| Analyst and system messages already have their own look (the analyst's name above the bubble; a centered note for the system)           | Small, and it keeps the UI honest if Stage 9 data shows up before its screens; nothing produces those messages yet                                                                             |
+| Risk resolved: a stream with only the transient `data-conversation-state` part creates no empty message in `useChat`                    | Checked in the browser with the conversation set to `waiting_analyst`                                                                                                                          |
+| Risk resolved: two messages sent at once at 29 against the real PostgreSQL                                                              | One answered `200`, the other `409 message_limit_reached`; the counter and the stored messages ended at 30                                                                                     |
