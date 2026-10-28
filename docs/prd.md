@@ -121,20 +121,20 @@ The UI keeps the Portuguese names used by Nexo (for example "Rede e VPN", "Alta"
 
 Each stage is an issue. The criteria below are a summary; the details live in the stage's PRD and tech spec.
 
-| #   | Stage                               | Issue                                                        | Covers           | Status |
-| --- | ----------------------------------- | ------------------------------------------------------------ | ---------------- | ------ |
-| 1   | Hello world                         | [#1](https://github.com/paulojnneto/service-desk/issues/1)   | N2, N3           | Done   |
-| 2   | Project skeleton                    | [#2](https://github.com/paulojnneto/service-desk/issues/2)   | N1, N7, N8, N9   | To do  |
-| 3   | Sign-in and employee shell          | [#3](https://github.com/paulojnneto/service-desk/issues/3)   | M1, N11          | To do  |
-| 4   | Domain and ticket service           | [#4](https://github.com/paulojnneto/service-desk/issues/4)   | M4, R7, R9, N5   | To do  |
-| 5   | Conversation persistence            | [#5](https://github.com/paulojnneto/service-desk/issues/5)   | F6, N6           | To do  |
-| 6   | Agent and service desk rules        | [#6](https://github.com/paulojnneto/service-desk/issues/6)   | M3, F1–F5, R1–R8 | To do  |
-| 7   | Chat cards and flows                | [#7](https://github.com/paulojnneto/service-desk/issues/7)   | M2               | To do  |
-| 8   | Decision transparency               | [#8](https://github.com/paulojnneto/service-desk/issues/8)   | M7               | To do  |
-| 9   | Handoff and analyst console         | [#9](https://github.com/paulojnneto/service-desk/issues/9)   | M5, M6, A1–A3    | To do  |
-| 10  | Decision quality (evals)            | [#10](https://github.com/paulojnneto/service-desk/issues/10) | M3, M7           | To do  |
-| 11  | Efficiency, resilience and security | [#11](https://github.com/paulojnneto/service-desk/issues/11) | N5, N10, N11     | To do  |
-| 12  | Deployment and final README         | [#12](https://github.com/paulojnneto/service-desk/issues/12) | N3, N7, N12      | To do  |
+| #   | Stage                               | Issue                                                        | Covers           | Status      |
+| --- | ----------------------------------- | ------------------------------------------------------------ | ---------------- | ----------- |
+| 1   | Hello world                         | [#1](https://github.com/paulojnneto/service-desk/issues/1)   | N2, N3           | Done        |
+| 2   | Project skeleton                    | [#2](https://github.com/paulojnneto/service-desk/issues/2)   | N1, N7, N8, N9   | Done        |
+| 3   | Sign-in and employee shell          | [#3](https://github.com/paulojnneto/service-desk/issues/3)   | M1, N11          | In progress |
+| 4   | Domain and ticket service           | [#4](https://github.com/paulojnneto/service-desk/issues/4)   | M4, R7, R9, N5   | To do       |
+| 5   | Conversation persistence            | [#5](https://github.com/paulojnneto/service-desk/issues/5)   | F6, N6           | To do       |
+| 6   | Agent and service desk rules        | [#6](https://github.com/paulojnneto/service-desk/issues/6)   | M3, F1–F5, R1–R8 | To do       |
+| 7   | Chat cards and flows                | [#7](https://github.com/paulojnneto/service-desk/issues/7)   | M2               | To do       |
+| 8   | Decision transparency               | [#8](https://github.com/paulojnneto/service-desk/issues/8)   | M7               | To do       |
+| 9   | Handoff and analyst console         | [#9](https://github.com/paulojnneto/service-desk/issues/9)   | M5, M6, A1–A3    | To do       |
+| 10  | Decision quality (evals)            | [#10](https://github.com/paulojnneto/service-desk/issues/10) | M3, M7           | To do       |
+| 11  | Efficiency, resilience and security | [#11](https://github.com/paulojnneto/service-desk/issues/11) | N5, N10, N11     | To do       |
+| 12  | Deployment and final README         | [#12](https://github.com/paulojnneto/service-desk/issues/12) | N3, N7, N12      | To do       |
 
 ### Stage 1 — Hello world (done)
 
