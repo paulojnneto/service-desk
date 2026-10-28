@@ -47,6 +47,7 @@ const draftBase = {
   duplicates: z.array(DraftDuplicate),
   // The ticket written when the draft was confirmed.
   resultTicket: z.string().nullable(),
+  createdAt: z.string(),
 };
 
 export const DraftView = z.discriminatedUnion("kind", [
@@ -70,3 +71,22 @@ export const DraftView = z.discriminatedUnion("kind", [
   }),
 ]);
 export type DraftView = z.infer<typeof DraftView>;
+
+// What the employee can change with "Editar" (stage 7 PRD, decision 5). Priority and
+// deadline are not here: the server recalculates them from impact and urgency (R9).
+export const EditDraftInput = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("create"),
+    fields: CreateDraftFields.pick({
+      type: true,
+      title: true,
+      description: true,
+      category: true,
+      impact: true,
+      urgency: true,
+    }),
+  }),
+  z.object({ kind: z.literal("update"), fields: UpdateDraftFields }),
+  z.object({ kind: z.literal("reopen"), fields: ReopenDraftFields }),
+]);
+export type EditDraftInput = z.infer<typeof EditDraftInput>;

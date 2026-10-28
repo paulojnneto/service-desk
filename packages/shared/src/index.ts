@@ -4,6 +4,7 @@ export * from "./decisions";
 export * from "./drafts";
 export * from "./directory";
 export * from "./priority";
+export * from "./questions";
 export * from "./scope";
 export * from "./service-desk";
 export * from "./service-token";

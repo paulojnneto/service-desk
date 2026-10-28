@@ -8,6 +8,7 @@ import {
   prepararReabertura,
 } from "./drafts";
 import { transferirParaAnalista } from "./handoff";
+import { perguntar } from "./question";
 import { buscarNaCentral, consultarChamado, listarMeusChamados } from "./read";
 
 const NOW = new Date("2026-10-28T13:00:00Z"); // Wednesday, 10:00 in São Paulo
@@ -224,6 +225,84 @@ describe("transferirParaAnalista", () => {
       trigger: "chamado_vencido",
       summary: "INC-20311 sem atualização há 6 dias.",
       ticketNumber: "INC-20311",
+    });
+  });
+});
+
+describe("perguntar", () => {
+  it("returns the question with its options and writes nothing", async () => {
+    const { services, context } = fakeServices();
+
+    const result = await run(
+      perguntar,
+      { pergunta: "Quem está sendo afetado?", opcoes: ["Só eu", "Minha equipe"] },
+      context,
+    );
+
+    expect(result).toEqual({
+      pergunta: {
+        kind: "options",
+        question: "Quem está sendo afetado?",
+        options: ["Só eu", "Minha equipe"],
+      },
+    });
+    expect(services.drafts.prepare).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the employee's open tickets in the picker, in the given order", async () => {
+    const { context } = fakeServices([
+      ticket({ number: "INC-20311", title: "Notebook lento" }),
+      ticket({ number: "REQ-10442", title: "Segundo monitor", status: "aprovado" }),
+      ticket({ number: "INC-20150", status: "resolvido" }),
+    ]);
+
+    const result = await run(
+      perguntar,
+      // REQ-10439 is Carla's: the employee's list does not have it, so it is dropped (R7).
+      {
+        pergunta: "Sobre qual deles?",
+        chamados: ["req-10442", "REQ-10439", "INC-20150", "INC-20311"],
+      },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      pergunta: {
+        kind: "tickets",
+        tickets: [
+          { number: "REQ-10442", title: "Segundo monitor", status: "aprovado" },
+          { number: "INC-20311", title: "Notebook lento" },
+        ],
+      },
+    });
+  });
+
+  it("refuses both or neither of options and tickets, and reports no valid ticket", async () => {
+    const { context } = fakeServices([ticket({})]);
+
+    expect(await run(perguntar, { pergunta: "Qual?" }, context)).toMatchObject({
+      permitido: false,
+    });
+    expect(
+      await run(
+        perguntar,
+        { pergunta: "Qual?", opcoes: ["a", "b"], chamados: ["INC-20311"] },
+        context,
+      ),
+    ).toMatchObject({ permitido: false });
+    expect(await run(perguntar, { pergunta: "Qual?", chamados: ["REQ-10439"] }, context)).toEqual({
+      encontrado: false,
+    });
+  });
+
+  it("reports the ticket service as unavailable", async () => {
+    const { services, context } = fakeServices();
+    services.tickets.list = async () => {
+      throw failing("unavailable");
+    };
+
+    expect(await run(perguntar, { pergunta: "Qual?", chamados: ["INC-20311"] }, context)).toEqual({
+      indisponivel: true,
     });
   });
 });

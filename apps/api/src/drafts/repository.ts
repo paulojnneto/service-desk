@@ -1,6 +1,6 @@
 import type { DraftInput } from "@nexo/agent";
 import { DraftView, type DraftStatus } from "@nexo/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/connect";
 import { drafts } from "../db/schema";
 
@@ -21,6 +21,7 @@ export function toDraftView(row: DraftRow): DraftView {
     fields: row.fields,
     duplicates: row.duplicates,
     resultTicket: row.resultTicket,
+    createdAt: row.createdAt.toISOString(),
   });
 }
 
@@ -89,6 +90,32 @@ export async function moveDraft(
     .where(and(eq(drafts.id, id), eq(drafts.employeeId, employeeId), eq(drafts.status, from)))
     .returning();
   return row ?? null;
+}
+
+// Changes the fields of a draft that is still pending (stage 7 PRD, S-07.6). A draft being
+// confirmed at the same moment is left alone: the update finds no pending row.
+export async function updatePendingDraft(
+  db: Db,
+  employeeId: string,
+  id: string,
+  changes: Pick<DraftRow, "fields" | "duplicates">,
+) {
+  const [row] = await db
+    .update(drafts)
+    .set(changes)
+    .where(and(eq(drafts.id, id), eq(drafts.employeeId, employeeId), eq(drafts.status, "pending")))
+    .returning();
+  return row ?? null;
+}
+
+// Every draft of the conversation, oldest first, in its current state (S-07.7).
+export async function listDrafts(db: Db, conversationId: string) {
+  const rows = await db
+    .select()
+    .from(drafts)
+    .where(eq(drafts.conversationId, conversationId))
+    .orderBy(asc(drafts.createdAt), asc(drafts.number));
+  return rows.map(toDraftView);
 }
 
 export async function discardWaitingDraft(db: Db, conversationId: string, now: Date) {

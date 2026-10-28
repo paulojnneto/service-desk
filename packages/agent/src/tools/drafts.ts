@@ -15,7 +15,7 @@ import { failureOf, isClosedStatus, servicesFrom } from "./shared";
 // when the employee presses "Confirmar", by the API. No tool here can write a ticket.
 
 const CONFIRM_NOTE =
-  "Rascunho salvo. Mostre o resumo e peça para o funcionário conferir e clicar em Confirmar; nada foi criado ainda.";
+  "Rascunho salvo e mostrado ao funcionário num card com todos os campos. Não repita os campos no texto: em uma frase, peça para ele conferir e clicar em Confirmar; nada foi criado ainda.";
 
 export const prepararChamado = createTool({
   id: "preparar-chamado",

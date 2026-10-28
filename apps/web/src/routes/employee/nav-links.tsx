@@ -23,10 +23,10 @@ export function NavLinks() {
           }
         >
           <Icon
-            className="size-4 text-ink-3 group-[.active]:text-primary-text"
+            className="size-4 shrink-0 text-ink-3 group-[.active]:text-primary-text"
             aria-hidden="true"
           />
-          {label}
+          <span className="sr-only md:not-sr-only">{label}</span>
         </NavLink>
       ))}
     </nav>

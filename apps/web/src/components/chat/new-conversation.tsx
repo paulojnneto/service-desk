@@ -16,7 +16,7 @@ export function NewConversation({ variant = "top-bar" }: { variant?: "top-bar" |
         onClick={() => dialog.current?.showModal()}
         className={
           variant === "top-bar"
-            ? "flex h-8 items-center gap-1.5 rounded-lg border border-rule px-2.5 text-[13px] font-semibold text-ink-2 hover:bg-desk"
+            ? "flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-rule px-2.5 text-[13px] font-semibold whitespace-nowrap text-ink-2 hover:bg-desk"
             : "flex items-center gap-1.5 font-semibold underline"
         }
       >

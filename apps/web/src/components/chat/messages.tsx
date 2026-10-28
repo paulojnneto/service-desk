@@ -1,23 +1,12 @@
 import type { MessageMetadata } from "@nexo/shared";
-import { getToolName, isToolUIPart, type UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { Check, LoaderCircle } from "lucide-react";
-import { DraftBlock, type DraftActions } from "./draft-block";
-import { draftOf } from "./draft-of";
-
-// Label of each tool in the action line above the agent's reply. registrarDecisao is not an
-// action the employee needs to see; Stage 8 shows the decision itself.
-const ACTION_LABELS: Record<string, string> = {
-  consultarHorario: "consultou o horário do service desk",
-  buscarNaCentral: "buscou na central de ajuda",
-  listarMeusChamados: "consultou seus chamados",
-  consultarChamado: "consultou o chamado",
-  prepararChamado: "montou o rascunho",
-  prepararAtualizacao: "montou o rascunho",
-  prepararReabertura: "verificou a reabertura",
-  descartarRascunho: "descartou o rascunho",
-  transferirParaAnalista: "chamou um analista",
-};
-const HIDDEN_TOOLS = new Set(["registrarDecisao"]);
+import { QuickQuestion } from "./cards/quick-question";
+import { TicketCard } from "./cards/ticket-card";
+import { TicketPicker } from "./cards/ticket-picker";
+import { CardError, CardLoading } from "./cards/card-shell";
+import { DraftCard, type DraftActions } from "./cards/draft-card";
+import { actionLabels, cardsOf, chosenIndex, isWaiting, type Card } from "./parts";
 
 function messageText(message: UIMessage): string {
   return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
@@ -33,35 +22,139 @@ export function UserMessage({ message }: { message: UIMessage }) {
   );
 }
 
+// What the cards of a reply need from the chat (stage 7).
+export type CardContext = {
+  messages: UIMessage[];
+  busy: boolean;
+  // Sends a choice as the employee's message (S-07.2, S-07.3).
+  onPick: (text: string) => void;
+  drafts: DraftActions;
+};
+
 // Replies from the agent, or from an analyst once the conversation is handed off (Stage 9).
-export function AgentMessage({ message, drafts }: { message: UIMessage; drafts?: DraftActions }) {
-  const tools = message.parts
-    .filter(isToolUIPart)
-    .filter((part) => !HIDDEN_TOOLS.has(getToolName(part)));
-  const draft = message.parts.map(draftOf).findLast(Boolean) ?? null;
+// As in the prototype, a ticket card comes before the text, a question with options sits in
+// the same bubble as the text, and the picker and the draft follow it.
+export function AgentMessage({ message, context }: { message: UIMessage; context?: CardContext }) {
+  const labels = actionLabels(message);
+  const cards = cardsOf(message);
   const text = messageText(message);
-  if (!text && tools.length === 0) return null;
+  if (!text && labels.length === 0 && cards.length === 0) return null;
   const metadata = message.metadata as MessageMetadata | undefined;
   const name = metadata?.author === "analyst" ? (metadata.authorName ?? "Analista") : "Nexo Assist";
+  const readAt = metadata?.createdAt ?? new Date().toISOString();
+
+  const options = cards.find(
+    (c): c is Extract<Card, { kind: "question" }> =>
+      c.kind === "question" && c.state === "ready" && c.question?.kind === "options",
+  );
+  const before = cards.filter((c) => c.kind === "ticket");
+  const after = cards.filter((c) => c !== options && c.kind !== "ticket");
+  const picker = after.find((c) => c.kind === "question" && c.question?.kind === "tickets");
+  // The picker's question ends the text: "Você tem 3 chamados abertos. Sobre qual deles…?"
+  const lead = [text, picker?.kind === "question" ? picker.question?.question : ""]
+    .filter(Boolean)
+    .join(" ");
+  const waiting = context ? isWaiting(context.messages, message.id) : false;
+  const chosen = context ? chosenIndex(context.messages, message.id) : null;
+  const pick = (choice: string) => context?.onPick(choice);
 
   return (
     <div className="flex flex-col gap-1.5">
       <StatusLine name={name}>
-        {tools.map((part) => (
-          <span key={part.toolCallId} className="flex items-center gap-[5px] text-ink-3">
-            {part.state === "output-available" ? (
+        {labels.map((label) => (
+          <span key={label.key} className="flex items-center gap-[5px] text-ink-3">
+            {label.done ? (
               <Check className="size-3" aria-hidden="true" />
             ) : (
               <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
             )}
-            {ACTION_LABELS[getToolName(part)] ?? getToolName(part)}
+            {label.label}
           </span>
         ))}
       </StatusLine>
-      {text && <AgentBubble>{text}</AgentBubble>}
-      {draft && drafts && <DraftBlock draft={draft} actions={drafts} />}
+      {before.map((card) => (
+        <CardFor
+          key={card.id}
+          card={card}
+          readAt={readAt}
+          waiting={waiting}
+          chosen={chosen}
+          context={context}
+          onPick={pick}
+        />
+      ))}
+      {(lead || options) && (
+        <AgentBubble>
+          {lead}
+          {options?.question?.kind === "options" && (
+            <QuickQuestion
+              question={options.question}
+              waiting={waiting}
+              chosen={chosen}
+              disabled={context?.busy ?? true}
+              onPick={pick}
+            />
+          )}
+        </AgentBubble>
+      )}
+      {after.map((card) => (
+        <CardFor
+          key={card.id}
+          card={card}
+          readAt={readAt}
+          waiting={waiting}
+          chosen={chosen}
+          context={context}
+          onPick={pick}
+        />
+      ))}
     </div>
   );
+}
+
+function CardFor({
+  card,
+  readAt,
+  waiting,
+  chosen,
+  context,
+  onPick,
+}: {
+  card: Card;
+  readAt: string;
+  waiting: boolean;
+  chosen: number | null;
+  context: CardContext | undefined;
+  onPick: (text: string) => void;
+}) {
+  if (card.kind === "ticket") return <TicketCard card={card} readAt={readAt} />;
+  if (card.kind === "question") {
+    if (card.state === "loading") return <CardLoading label="consultando seus chamados…" />;
+    if (card.state === "unavailable") {
+      return (
+        <CardError>Não consegui listar seus chamados agora. Tente de novo em instantes.</CardError>
+      );
+    }
+    if (card.question?.kind !== "tickets") return null;
+    return (
+      <TicketPicker
+        question={card.question}
+        waiting={waiting}
+        chosen={chosen}
+        disabled={context?.busy ?? true}
+        onPick={onPick}
+      />
+    );
+  }
+  if (card.state === "loading") return <CardLoading label="montando o rascunho…" />;
+  if (card.state === "unavailable") {
+    return (
+      <CardError>Não consegui montar o rascunho: o sistema de chamados não respondeu.</CardError>
+    );
+  }
+  return card.draft && context ? (
+    <DraftCard snapshot={card.draft} actions={context.drafts} />
+  ) : null;
 }
 
 // Notes from the system, such as "conversa transferida" (Stage 9).

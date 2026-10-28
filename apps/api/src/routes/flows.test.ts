@@ -1,4 +1,4 @@
-import type { ConversationView } from "@nexo/shared";
+import type { ConversationView, QuestionView } from "@nexo/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { queryRows, type Db } from "../db/connect";
@@ -46,6 +46,14 @@ async function say(text: string): Promise<string> {
   return "";
 }
 
+// The question asked with perguntar in the agent's last reply, if any.
+async function lastQuestion(): Promise<QuestionView | undefined> {
+  const parts = (await current()).messages.at(-1)?.parts ?? [];
+  const part = parts.find((p) => (p as { type: string }).type === "tool-perguntar") as
+    { output?: { pergunta?: QuestionView } } | undefined;
+  return part?.output?.pergunta;
+}
+
 const lastDecision = async () => (await current()).messages.at(-1)?.metadata.decision;
 const anaOpen = () => tickets.as("ana.souza").list("open");
 const draftCount = async () =>
@@ -60,17 +68,29 @@ async function confirmPending() {
 describe("simulated flows", () => {
   it("VPN error 809 on Windows 11 ends in a high-priority draft, created only after Confirmar", async () => {
     const asked = await say("Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.");
-    expect(asked).toContain("versão do Windows");
+    expect(asked).toContain("depende do sistema");
+    expect(await lastQuestion()).toMatchObject({ options: ["Windows 10", "Windows 11"] });
     expect((await lastDecision())?.tools.map((t) => t.name)).toEqual([
       "listarMeusChamados",
       "buscarNaCentral",
+      "perguntar",
     ]);
 
-    expect(await say("Windows 11")).toContain("Quem está sendo afetado?");
+    expect(await say("Windows 11")).toContain("Vou abrir um chamado");
+    expect(await lastQuestion()).toEqual({
+      kind: "options",
+      question: "Quem está sendo afetado?",
+      options: ["Só eu", "Minha equipe", "Toda a empresa", "Não sei"],
+    });
 
-    const drafted = await say(
-      "Só eu. Tenho reunião com um cliente às 14h e preciso da VPN funcionando.",
-    );
+    // Picking an option sends its text; with no urgency in it, the urgency is asked next.
+    await say("Só eu");
+    expect(await lastQuestion()).toMatchObject({
+      kind: "options",
+      options: ["Estou parado", "Tenho compromisso hoje", "Consigo contornar", "Sem urgência"],
+    });
+
+    const drafted = await say("Tenho compromisso hoje");
     expect(drafted).toContain("Confirmar");
     expect(await lastDecision()).toMatchObject({
       action: "preparou_rascunho",
@@ -90,12 +110,31 @@ describe("simulated flows", () => {
     expect((await anaOpen()).length).toBe(before + 1);
   });
 
-  it("ticket status: lists, explains the overdue INC-20311 and hands off to an analyst", async () => {
-    expect(await say("Qual o status do meu chamado?")).toContain("Você tem 3 chamados abertos");
+  it("answers the prototype's single message with impact and urgency in one go", async () => {
+    await say("Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.");
+    await say("Windows 11");
 
-    const overdue = await say("INC-20311 · Notebook lento após atualização");
-    expect(overdue).toContain("prazo venceu");
-    expect(overdue).toContain("analista");
+    expect(
+      await say("Só eu. Tenho reunião com um cliente às 14h e preciso da VPN funcionando."),
+    ).toContain("Confirmar");
+    expect(await lastDecision()).toMatchObject({ action: "preparou_rascunho" });
+  });
+
+  it("ticket status: picker, overdue INC-20311 with options, then hands off to an analyst", async () => {
+    expect(await say("Qual o status do meu chamado?")).toContain("Você tem 3 chamados abertos");
+    const picker = await lastQuestion();
+    expect(picker?.kind).toBe("tickets");
+    expect(picker?.kind === "tickets" && picker.tickets.map((t) => t.number)).toEqual(
+      expect.arrayContaining(["INC-20311", "INC-20298", "REQ-10442"]),
+    );
+
+    const overdue = await say("INC-20311 · Notebook lento após atualização do Windows");
+    expect(overdue).toContain("prazo de resposta venceu");
+    expect(await lastQuestion()).toEqual({
+      kind: "options",
+      question: "Quer que eu chame um analista?",
+      options: ["Falar com um analista", "Adicionar informação", "Não, obrigado"],
+    });
 
     expect(await say("Falar com um analista")).toContain("Um analista vai responder");
     expect((await current()).state).toBe("waiting_analyst");
@@ -103,6 +142,29 @@ describe("simulated flows", () => {
     const ticket = await tickets.as("ana.souza").get("INC-20311");
     expect(ticket.events?.at(-1)).toMatchObject({ kind: "transferred" });
     expect(ticket.events?.at(-1)?.message).toContain("[chamado_vencido]");
+  });
+
+  it("after an overdue ticket, 'Adicionar informação' leads to an update draft", async () => {
+    await say("INC-20311");
+
+    expect(await say("Adicionar informação")).toContain(
+      "O que você quer acrescentar ao INC-20311?",
+    );
+    expect(await say("Também trava ao abrir o Teams")).toContain("Confirmar");
+    const { pendingDraftId } = await current();
+    const [draft] = await queryRows<{ kind: string; ticket_number: string }>(
+      db,
+      sql`select kind, ticket_number from drafts where id = ${pendingDraftId}`,
+    );
+    expect(draft).toEqual({ kind: "update", ticket_number: "INC-20311" });
+  });
+
+  it("after an overdue ticket, 'Não, obrigado' changes nothing", async () => {
+    await say("INC-20311");
+
+    expect(await say("Não, obrigado")).toContain("Tudo bem");
+    expect((await current()).state).toBe("with_agent");
+    expect(await draftCount()).toBe(0);
   });
 
   it("adds information to an open ticket through a draft", async () => {
