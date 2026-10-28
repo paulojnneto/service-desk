@@ -1,183 +1,171 @@
 # Stage 02 — Project skeleton: tech spec
 
-|        |                                                            |
-| ------ | ---------------------------------------------------------- |
-| Issue  | [#2](https://github.com/paulojnneto/service-desk/issues/2) |
-| PRD    | [`prd.md`](prd.md) (approved on 2026-10-27)                |
-| Status | Approved (2026-10-27)                                      |
+|        |                                                                                |
+| ------ | ------------------------------------------------------------------------------ |
+| Issue  | [#2](https://github.com/paulojnneto/service-desk/issues/2)                     |
+| PRD    | [`prd.md`](prd.md), revision 2                                                 |
+| Status | Revision 2 — approved on 2026-10-27 (revision 1 approved earlier the same day) |
+
+## Changes in revision 2
+
+Revision 1 kept the UI and the agent together in a Next.js app. Following PRD decision 4, revision 2 replaces it with:
+
+- **`apps/web`:** a client-only Vite + React app.
+- **`apps/api` (new):** a Hono backend that runs the agent and exposes the chat route.
+
+Everything else from revision 1 stays: the workspace, the agent package, the simulated model, the ticket service, the shared vocabulary, the theme tokens, the tooling and the CI. Its commits stay in the branch history, and this revision adds new commits on top.
 
 ## Solution overview
 
-The repository becomes a **pnpm workspace** with four packages. Each one owns one responsibility from the PRD, and the dependency arrows only point one way:
-
 ```
-apps/web  ──uses──▶  packages/agent  ──uses──▶  packages/shared
- (Next.js UI          (Mastra agent,              (domain vocabulary:
-  and API routes)      tools, models)              types, categories,
-                                                   priorities, deadlines)
-                            ┆
-                            ┆ HTTP, from Stage 4
-                            ▼
-                      apps/tickets  ──uses──▶  packages/shared
-                      (ticket service,
-                       its own process)
+ Browser                       Backend (Node)
+┌──────────────────┐  /api   ┌──────────────────────┐        ┌──────────────────────┐
+│ apps/web         │ ──────▶ │ apps/api  (port 3001)│ ─uses─▶│ packages/agent       │
+│ Vite + React     │ ◀stream─│ Hono: /api/chat,     │        │ Mastra agent, tools, │
+│ (port 3000)      │         │ /health              │        │ models               │
+└──────────────────┘         └──────────────────────┘        └──────────┬───────────┘
+                                        ┆ HTTP, from Stage 4             │ uses
+                                        ▼                                ▼
+                             ┌──────────────────────┐        ┌──────────────────────┐
+                             │ apps/tickets (4000)  │ ─uses─▶│ packages/shared      │
+                             │ Hono, legacy system  │        │ Annex A vocabulary   │
+                             └──────────────────────┘        └──────────────────────┘
 ```
 
-- **`apps/web`** keeps the hello world page and route, moved as they are. It talks to the agent only through `@nexo/agent` (S-02.3).
-- **`packages/agent`** holds the Mastra instance, the agent, its tools and the model selection, including the simulated model (S-02.10, S-02.11).
-- **`apps/tickets`** is a separate HTTP service. In this stage it only answers a health check, which is enough to prove the separate process (S-02.2) and give Stage 4 a tested starting point.
-- **`packages/shared`** holds the Annex A vocabulary (ticket types, categories, priorities and the deadline table) as zod schemas, so that the agent and the ticket service use the same definitions.
-
-Quality tooling lives at the root and applies to every package: shared strict TypeScript, ESLint, Prettier, Vitest and a GitHub Actions workflow (S-02.4 to S-02.7).
-
-**Reference implementation.** The local branch `local/etapa-esqueleto` has an earlier, unreviewed version of this stage. It is reused file by file only where it matches this spec, and every reused file is reviewed against it.
+- **`apps/web`** is static files plus JavaScript in the browser. It only knows the `/api` path and never sees a key (S-02.15, S-02.16).
+- **`apps/api`** is the backend for the UI. In this stage it serves the chat route, with the agent's reply streamed in the AI SDK format that `useChat` consumes, and a health check. Later stages add sign-in, conversations and the analyst console here.
+- **`packages/agent`**, **`apps/tickets`** and **`packages/shared`** are unchanged from revision 1.
+- **In development**, the Vite dev server forwards `/api` to `localhost:3001`, so the browser sees a single origin. **In production**, the plan is for the API to serve the built UI from the same origin; Stage 12 confirms it.
 
 ## Files and modules
 
-| Path                                  | What changes                                                                                                                                            | Why                    |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `package.json`                        | Becomes the workspace root: `dev`, `build`, `lint`, `typecheck`, `test`, `format` scripts; shared dev tooling                                           | S-02.6, S-02.8         |
-| `pnpm-workspace.yaml`                 | Declares `apps/*` and `packages/*`                                                                                                                      | S-02.1                 |
-| `tsconfig.base.json`                  | Strict config shared by every package                                                                                                                   | S-02.4                 |
-| `eslint.config.mjs`                   | typescript-eslint rules for the non-Next packages                                                                                                       | S-02.5                 |
-| `.prettierrc.json`, `.prettierignore` | Formatting standard                                                                                                                                     | S-02.5                 |
-| `.gitattributes`                      | LF line endings for text, binary for images                                                                                                             | S-02.5                 |
-| `.gitignore`                          | Unanchored patterns (`node_modules/`, `.next/`) so they cover every package; ignores `docs/prototype/`                                                  | S-02.1, PRD decision 1 |
-| `vitest.config.mts`                   | One test run across packages                                                                                                                            | S-02.6                 |
-| `.github/workflows/ci.yml`            | Format check, lint, typecheck, test and build                                                                                                           | S-02.7                 |
-| `.nvmrc`, `engines`                   | Node 22 pinned                                                                                                                                          | S-02.9                 |
-| `apps/web/**`                         | Hello world app moved here with `git mv`; `package.json`, `tsconfig.json` extending the base, `next.config.ts` with `transpilePackages`, `.env.example` | S-02.1, S-02.8         |
-| `apps/web/src/app/globals.css`        | Theme tokens mirroring `nexo.pen`                                                                                                                       | S-02.12                |
-| `apps/web/src/app/layout.tsx`         | Prototype fonts                                                                                                                                         | S-02.12                |
-| `apps/web/src/app/api/chat/route.ts`  | Imports the agent from `@nexo/agent`                                                                                                                    | S-02.3                 |
-| `apps/tickets/**`                     | Hono app (`createApp`), server entry point, health test, `.env.example`                                                                                 | S-02.2                 |
-| `packages/agent/src/**`               | Mastra instance, agent and tool moved from `src/mastra`; `models/` with the model selection, the scripted model and its script; end-to-end test         | S-02.10, S-02.11       |
-| `packages/shared/src/**`              | Annex A vocabulary                                                                                                                                      | S-02.1                 |
-| `README.md`                           | Install, configure, run, structure, switching models                                                                                                    | S-02.14                |
+| Path                                     | What changes                                                                                                                                                                                             | Why              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `apps/api/**`                            | New: `createApp()` with `GET /health` and `POST /api/chat`, server entry point, tests, `.env.example`, `package.json`, `tsconfig.json`                                                                   | S-02.15, S-02.16 |
+| `apps/web/index.html`, `src/main.tsx`    | New Vite entry point: mounts React and imports the CSS and fonts                                                                                                                                         | S-02.15          |
+| `apps/web/src/app.tsx`                   | The hello world chat page, moved from `src/app/page.tsx` with `git mv`                                                                                                                                   | S-02.15          |
+| `apps/web/src/index.css`                 | The theme tokens, moved from `src/app/globals.css` with `git mv`; the font variables now point to the Fontsource families                                                                                | S-02.12          |
+| `apps/web/vite.config.ts`                | React and Tailwind plugins, port 3000, `/api` proxy to the API                                                                                                                                           | S-02.8, S-02.15  |
+| `apps/web/package.json`, `tsconfig.json` | Vite scripts and dependencies; one tsconfig for `src` and `vite.config.ts`                                                                                                                               | S-02.4           |
+| `apps/web/public/favicon.ico`            | Moved from `src/app/favicon.ico`                                                                                                                                                                         | —                |
+| Removed from `apps/web`                  | `next.config.ts`, `src/app/layout.tsx`, `src/app/api/chat/route.ts` (now in the API), the Next.js `eslint.config.mjs`, `AGENTS.md` (Next.js-only instructions), `.env.example` (the UI has no variables) | S-02.16          |
+| `eslint.config.mjs`                      | One config for the whole repository, now on ESLint 10, with React Hooks and React Refresh rules for `apps/web`                                                                                           | S-02.5           |
+| `package.json` (root)                    | `dev` also starts `@nexo/api`; ESLint 10                                                                                                                                                                 | S-02.8           |
+| `vitest.config.mts`                      | Includes `apps/api` tests                                                                                                                                                                                | S-02.6           |
+| `README.md`, `docs/prd.md`               | New structure, ports and the rule about secrets                                                                                                                                                          | S-02.14          |
 
 ## Decisions
 
-| Decision                  | Choice                                                                                                                                              | Alternatives considered                                                 | Reason                                                                                                                                                                                     |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository layout         | pnpm workspace (monorepo)                                                                                                                           | Single Next.js app with folders; separate repositories                  | Package boundaries are enforced by each package's `exports`, not by convention, and there is still one install and one CI. Separate repositories would make the reviewers' setup harder    |
-| Task runner               | Plain `pnpm -r` / `--parallel`                                                                                                                      | Turborepo, Nx                                                           | Four packages do not need build caching or a task graph; one less tool to explain                                                                                                          |
-| How packages are consumed | As TypeScript source (`exports: ./src/index.ts`), with `transpilePackages` in Next.js                                                               | Building each package to `dist`                                         | No build step or watch process per package. Every consumer (Next.js, tsx, Vitest) already compiles TypeScript                                                                              |
-| Ticket service framework  | Hono with `@hono/node-server`                                                                                                                       | Express, Fastify, Next.js route handlers                                | Small, typed and based on the Fetch API. `app.request()` lets tests call it without opening a port. Route handlers inside the web app would break the required separation                  |
-| Ticket service runner     | `tsx` (`watch` in dev)                                                                                                                              | Compiling with `tsc` and running `node dist`                            | No build step now; how it runs in production is decided in Stage 12                                                                                                                        |
-| Test runner               | Vitest, one root config                                                                                                                             | Jest                                                                    | Native TypeScript and ESM support, no transform setup                                                                                                                                      |
-| Lint                      | ESLint 9 flat config: Next.js rules in `apps/web`, typescript-eslint recommended at the root for the others                                         | ESLint 10; Biome                                                        | `eslint-config-next` 16.4 targets ESLint 9. Biome would not run the Next.js rules                                                                                                          |
-| Formatting                | Prettier, `printWidth: 100`                                                                                                                         | Biome                                                                   | Standard choice that every editor supports                                                                                                                                                 |
-| Simulated model           | A scripted `LanguageModelV4` implemented in `packages/agent/src/models`                                                                             | `MockLanguageModelV4` from `ai/test`; mocking Mastra; record and replay | Mastra treats it as a real model, so tools run for real (S-02.11). It is production code, not a test utility, and it controls the streaming (text arrives word by word, like a real model) |
-| Provider types            | `@ai-sdk/provider` pinned to `4.0.29`, the version Mastra uses internally                                                                           | Latest version                                                          | Different versions make Mastra reject our model at the type level                                                                                                                          |
-| Model selection           | `NEXO_AGENT_MODEL`: empty or `mock` uses the simulated model; any other value is a Mastra model router ID (for example `anthropic/claude-opus-5-5`) | A separate boolean flag                                                 | One variable, and the default works with no key (PRD decision 2)                                                                                                                           |
-| Theme                     | Tailwind v4 `@theme` with the `nexo.pen` variables, resetting the default palette (`--color-*: initial`)                                            | Keeping Tailwind's palette next to ours                                 | Only prototype colors are usable, so screens cannot drift from the prototype                                                                                                               |
-| Fonts                     | `next/font/google`: Schibsted Grotesk for the UI, Newsreader for display titles                                                                     | Self-hosted font files                                                  | The fonts the prototype uses, optimized and served by Next.js                                                                                                                              |
-| Icons                     | `lucide-react`                                                                                                                                      | Other icon sets                                                         | The prototype's icons come from the Lucide library                                                                                                                                         |
-| Prototype files           | Git-ignored `docs/prototype/`                                                                                                                       | Versioning them                                                         | PRD decision 1                                                                                                                                                                             |
-| Node version              | `.nvmrc` with `22` and `engines: ">=22.13 <23"`                                                                                                     | Node 24                                                                 | The version agreed for this project; Mastra requires 22.13 or newer                                                                                                                        |
-| CI                        | GitHub Actions on Ubuntu: `pnpm/action-setup` (reads `packageManager`), `actions/setup-node` with `.nvmrc`, `pnpm install --frozen-lockfile`        | Other CI providers                                                      | Same versions as local development, and a lockfile change has to be committed                                                                                                              |
+### New in revision 2
+
+| Decision               | Choice                                                                                                                                     | Alternatives considered                                    | Reason                                                                                                                                                                                                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI framework           | Vite 8 + React 19 (`@vitejs/plugin-react`)                                                                                                 | Next.js 16 (revision 1); React Router in framework mode    | PRD decision 4                                                                                                                                                                                                                                                                                                   |
+| Agent API              | Our own Hono app calling the agent through `handleChatStream` from `@mastra/ai-sdk`                                                        | Mastra's standalone server (`mastra dev` with `chatRoute`) | The API will also host routes that are not the agent's (sign-in, conversations, analyst console, live updates) behind our own auth middleware and error handling. Same framework as the ticket service, and no extra CLI or build step. The cost is losing Mastra Studio, which can be added later for debugging |
+| Dev connectivity       | Vite proxy: `/api` → `http://localhost:3001`                                                                                               | Calling the API on another origin with CORS                | One origin in the browser, so the session cookie in Stage 3 works without CORS or credentials settings, the same way it will in production                                                                                                                                                                       |
+| Production serving     | The API serves the built UI (`apps/web/dist`) from the same origin, confirmed in Stage 12                                                  | Two deployments (static host + API)                        | One deployment, one origin, no CORS                                                                                                                                                                                                                                                                              |
+| API runner             | `tsx` (`watch` in dev), like the ticket service                                                                                            | Compiling with `tsc`                                       | No build step now; Stage 12 decides how it runs in production                                                                                                                                                                                                                                                    |
+| Fonts                  | `@fontsource-variable/schibsted-grotesk` and `@fontsource-variable/newsreader`, imported in `main.tsx`                                     | A Google Fonts `<link>`; copying font files by hand        | Self-hosted through the build: no request to a third party and no layout shift from a late font                                                                                                                                                                                                                  |
+| Tailwind integration   | `@tailwindcss/vite` plugin                                                                                                                 | PostCSS setup                                              | The official Tailwind v4 integration for Vite                                                                                                                                                                                                                                                                    |
+| Lint                   | One root ESLint 10 config: typescript-eslint everywhere, plus `eslint-plugin-react-hooks` and `eslint-plugin-react-refresh` for `apps/web` | Keeping ESLint 9 and a separate config for the web app     | `eslint-config-next` was the only reason to stay on ESLint 9 and keep a second config. One config is simpler to explain and to keep consistent                                                                                                                                                                   |
+| UI typecheck and build | `tsc --noEmit` for types, `vite build` for the bundle                                                                                      | `tsc -b` with project references                           | One tsconfig is enough for one small app                                                                                                                                                                                                                                                                         |
+| Ports                  | UI 3000 (`strictPort`), API 3001, tickets 4000                                                                                             | Vite's default 5173                                        | Easy to remember, and `strictPort` fails loudly instead of quietly moving to another port                                                                                                                                                                                                                        |
+| Secrets in the UI      | The UI has no `.env` at all; secrets live only in `apps/api/.env.local`                                                                    | A UI `.env` with non-secret settings                       | Vite publishes every `VITE_*` variable to the browser. With no UI variables, there is nothing to leak by mistake                                                                                                                                                                                                 |
+
+### Kept from revision 1
+
+| Decision                  | Choice                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| Repository layout         | pnpm workspace, plain `pnpm -r` / `--parallel`, no Turborepo                                     |
+| How packages are consumed | As TypeScript source (`exports: ./src/index.ts`); Vite and tsx compile them directly             |
+| Ticket service            | Hono with `@hono/node-server`, run with `tsx`                                                    |
+| Tests                     | Vitest, one root config                                                                          |
+| Formatting                | Prettier, `printWidth: 100`, `.gitattributes` with LF                                            |
+| Simulated model           | Scripted `LanguageModelV4` in `packages/agent/src/models`, `@ai-sdk/provider` pinned to `4.0.29` |
+| Model selection           | `NEXO_AGENT_MODEL`: empty or `mock` for the simulated model, otherwise a Mastra model router ID  |
+| Theme                     | Tailwind v4 `@theme` with every color variable from `nexo.pen`, default palette reset            |
+| Icons                     | `lucide-react`                                                                                   |
+| Prototype files           | Git-ignored `docs/prototype/`                                                                    |
+| Node version              | `.nvmrc` with `22`, `engines: ">=22.13 <23"`                                                     |
+| CI                        | GitHub Actions on Ubuntu with frozen lockfile                                                    |
+
+`transpilePackages` in the Next.js config is no longer needed: Vite compiles workspace TypeScript sources without extra configuration.
 
 ## Contracts
 
-**`@nexo/agent`**
+**`apps/api`**
 
-```ts
-export const mastra: Mastra; // registers the agent under the key "nexoAssist" and the id "nexo-assist"
-```
+| Method | Path        | Request                                                       | Response                                                               |
+| ------ | ----------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/health`   | —                                                             | `200 {"status":"ok"}`                                                  |
+| POST   | `/api/chat` | AI SDK chat request, as sent by `useChat` (`{ messages, … }`) | `200`, UI message stream (server-sent events) with tool calls and text |
+| POST   | `/api/chat` | Body that is not valid JSON                                   | `400 {"error":"invalid_json"}`                                         |
 
-`packages/agent/src/models`:
-
-```ts
-type ScriptStep =
-  | { kind: "tool"; toolName: string; input: Record<string, unknown> }
-  | { kind: "text"; text: string };
-type Script = (prompt: LanguageModelV4Prompt) => ScriptStep;
-
-function createScriptedModel(script: Script): LanguageModelV4;
-function resolveModel(modelId?: string): LanguageModelV4 | string;
-```
-
-On each model call, the script looks at the prompt and returns one step: call a tool or answer with text. This stage's script:
-
-- user asks about hours → call `consultarHorario`;
-- the last message is the result of `consultarHorario` → answer with the hours from that result;
-- anything else → a fixed reply saying the agent is in simulated mode.
-
-**`@nexo/shared`**
-
-```ts
-TicketType; // zod enum: "INC" | "REQ"
-Category; // zod enum: "Acesso" | "Rede e VPN" | "Hardware" | "Software" | "E-mail" | "Outros"
-Priority; // zod enum: "critica" | "alta" | "media" | "baixa"
-SLA_BY_PRIORITY; // Record<Priority, { label; amount; unit: "hours" | "business_hours" | "business_days" }>
-```
-
-The values are in Portuguese because they are shown in the UI and stored with the tickets.
-
-**`apps/tickets`**
-
-| Method | Path      | Response              |
-| ------ | --------- | --------------------- |
-| GET    | `/health` | `200 {"status":"ok"}` |
+**`@nexo/agent`**, **`@nexo/shared`** and **`apps/tickets`**: unchanged from revision 1.
 
 **Environment variables**
 
 | App     | Variable            | Default | Purpose                                     |
 | ------- | ------------------- | ------- | ------------------------------------------- |
-| web     | `NEXO_AGENT_MODEL`  | `mock`  | Simulated model or a Mastra model router ID |
-| web     | `ANTHROPIC_API_KEY` | empty   | Only needed with an Anthropic model         |
+| api     | `NEXO_AGENT_MODEL`  | `mock`  | Simulated model or a Mastra model router ID |
+| api     | `ANTHROPIC_API_KEY` | empty   | Only needed with an Anthropic model         |
+| api     | `PORT`              | `3001`  | Port of the agent API                       |
 | tickets | `PORT`              | `4000`  | Port of the ticket service                  |
+| web     | —                   | —       | None, on purpose (S-02.16)                  |
 
 ## Error handling
 
-| Failure                                      | What happens                                                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Real model configured without its key        | The chat shows its existing error state ("Não consegui responder agora…"); the server log names the missing variable |
-| The script gets a message it does not handle | It answers with the fixed simulated-mode reply instead of failing                                                    |
-| Ticket service port in use                   | The process exits with the Node error that names the port                                                            |
-| Unsupported Node version                     | pnpm prints the `engines` warning                                                                                    |
+| Failure                                      | What happens                                                                                          |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| The API is down while the UI runs            | The proxy answers with an error, and the chat shows its error state ("Não consegui responder agora…") |
+| Real model configured without its key        | Same error state in the chat; the API log names the missing variable                                  |
+| Invalid JSON sent to `/api/chat`             | `400` with `invalid_json`, without reaching the agent                                                 |
+| The script gets a message it does not handle | It answers with the fixed simulated-mode reply                                                        |
+| A port is already in use                     | The process exits with an error naming the port (`strictPort` for the UI)                             |
+| Unsupported Node version                     | pnpm prints the `engines` warning                                                                     |
 
 ## Test plan
 
-| What                                                                                    | Type                                                | Why it is worth testing                                                                                       |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| The agent with the simulated model calls `consultarHorario` and answers with its result | Integration (real Mastra and real tool, no network) | Proves the agent wiring and the simulated mode together. Later stages extend this test pattern for every flow |
-| The agent with the simulated model answers without tools for an unknown request         | Integration                                         | Covers the fallback path                                                                                      |
-| The ticket service answers the health check                                             | Integration (`app.request`)                         | Proves the service starts and sets up the test harness for Stage 4                                            |
+| What                                                                                    | Type                                 | Why it is worth testing                                                 |
+| --------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------- |
+| The agent with the simulated model calls `consultarHorario` and answers with its result | Integration (kept from revision 1)   | Agent wiring and the simulated mode                                     |
+| The agent answers without tools for an unknown request                                  | Integration (kept)                   | Fallback path                                                           |
+| `POST /api/chat` with the simulated model streams the tool call and the reply           | Integration (`app.request`, no port) | Proves the HTTP contract the UI depends on, including the stream format |
+| `POST /api/chat` with invalid JSON answers 400                                          | Integration                          | Error path of the contract                                              |
+| The API and the ticket service answer their health checks                               | Integration                          | Both services start, and the test harness is ready for later stages     |
 
-There are no UI tests in this stage: the only screen is the hello world page, which Stage 3 replaces.
+There are still no UI tests: the only screen is the hello world page, which Stage 3 replaces.
 
 **Manual validation of the acceptance criteria**
 
-1. From a fresh clone: `pnpm install`, copy `apps/web/.env.example`, then `pnpm dev`. Open `http://localhost:3000` and `http://localhost:4000/health`.
-2. Ask "qual o horário do service desk?" with no key set, and check the action line and the reply.
-3. Set `NEXO_AGENT_MODEL=anthropic/claude-opus-5-5` without a key, and check that the chat shows the error state, which proves the real model is being used.
-4. Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`.
-5. Open the stage pull request and check that CI passes.
-6. Compare the tokens in `globals.css` with the `variables` in `nexo.pen`.
-7. Run `pnpm install` with Node 25 and check for the `engines` warning.
-8. Search the code for Portuguese comments.
+1. From a fresh clone: `pnpm install`, copy `apps/api/.env.example` to `apps/api/.env.local`, then `pnpm dev`. Open `http://localhost:3000`, `http://localhost:3001/health` and `http://localhost:4000/health`.
+2. Ask "qual o horário do service desk?" with no key set, and check the action line, the streamed reply and the fonts.
+3. Set `NEXO_AGENT_MODEL=anthropic/claude-opus-5-5` in the API without a key, and check that the chat shows the error state and the API log names the missing key.
+4. Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`.
+5. Push and check that CI passes on PR #13.
+6. Search `apps/web/dist` for `ANTHROPIC` and for key-like values, and check that `apps/web` has no `.env` file or `VITE_` variable.
+7. Compare the tokens with `nexo.pen` using the token check script.
+8. Run a pnpm command with Node 25 and check for the `engines` warning.
+9. Search the code for Portuguese comments.
 
 ## Commit plan
 
-1. `docs(stage-02): approved PRD for the project skeleton` (done)
-2. `docs(stage-02): tech spec for the project skeleton`
-3. `chore: convert the repository to a pnpm workspace` — move the web app and the agent with `git mv`, so that history follows the files
-4. `chore: shared TypeScript, lint, format and test tooling`
-5. `feat(tickets): ticket service skeleton with a health check`
-6. `feat(agent): simulated model selected by NEXO_AGENT_MODEL`
-7. `feat(web): prototype theme tokens and fonts`
-8. `ci: run format, lint, typecheck, tests and build on GitHub Actions`
-9. `docs: README for the workspace`
+Commits 1 to 9 from revision 1 stay in the branch. New commits:
 
-Then a pull request "Stage 02 — Project skeleton" with `Closes #2`.
+10. `docs(stage-02): revision 2 of the PRD and tech spec (Vite + React, separate API)`
+11. `feat(api): agent API with the chat route and a health check`
+12. `refactor(web): replace Next.js with Vite + React`
+13. `chore: one ESLint 10 config with React rules for the whole repository`
+14. `docs: README and product PRD for the new structure`
+
+Then the PR #13 description and the issue #2 text are updated to the new structure.
 
 ## Risks
 
-| Risk                                                           | Mitigation                                                                  |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Mastra and AI SDK versions drift and break types               | Exact versions pinned; `pnpm typecheck` runs in CI                          |
-| Next.js 16 APIs differ from older docs                         | Use the docs bundled in `node_modules/next/dist/docs` (as `AGENTS.md` asks) |
-| Windows locally, Linux in CI (line endings, path casing)       | `.gitattributes` with LF; CI on Ubuntu catches casing issues                |
-| The machine's global Node is 25 (nvm-windows)                  | `engines` warns; the README tells how to switch with `nvm use`              |
-| pnpm 10 skips dependency build scripts (for example `esbuild`) | `tsx` works without them; CI confirms it on a clean install                 |
+| Risk                                                       | Mitigation                                                                                                                                                                                                |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A key ends up in the UI bundle through a `VITE_*` variable | The UI has no env file at all; acceptance criterion 8 checks the build output                                                                                                                             |
+| The Vite proxy buffers the streamed reply                  | Verified manually in step 2 (the text must arrive word by word)                                                                                                                                           |
+| The chat route was written for Next.js                     | `handleChatStream` only takes the parsed body and returns a stream, and `createUIMessageStreamResponse` returns a standard `Response` that Hono returns as is; the `/api/chat` integration test proves it |
+| The branch history shows Next.js first and Vite later      | It is the real history; PRD decision 4 explains the change, which is a useful talking point                                                                                                               |
+| Mastra and AI SDK versions drift                           | Exact versions pinned; typecheck in CI                                                                                                                                                                    |
