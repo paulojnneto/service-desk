@@ -1,6 +1,7 @@
 import {
   Confidence,
   Intent,
+  RuleId,
   type DecisionAction,
   type DecisionRecord,
   type ToolOutcome,
@@ -20,7 +21,7 @@ const DecisionInput = z.object({
   intencao: Intent,
   confianca: Confidence,
   justificativa: z.string(),
-  regras: z.array(z.string()),
+  regras: z.array(RuleId),
 });
 
 const MISSING: Pick<DecisionRecord, "intent" | "confidence" | "rationale" | "rules"> = {
@@ -51,7 +52,15 @@ export function buildDecisionRecord(parts: unknown[]): DecisionRecord {
     .filter((t) => t.name !== DECISION_TOOL)
     .map((t) => ({ name: t.name, outcome: outcomeOf(t.part) }));
 
-  return { ...decision, action: actionOf(ran, decision), tools: ran };
+  return {
+    ...decision,
+    action: actionOf(ran, decision),
+    tools: ran,
+    // Filled from the tools that ran in the next commit (stage 8 tech spec).
+    enforcedRules: [],
+    source: "agent",
+    registered: parsed.success,
+  };
 }
 
 function isToolPart(part: unknown): part is ToolPart {

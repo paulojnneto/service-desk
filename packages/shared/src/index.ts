@@ -1,5 +1,6 @@
 export * from "./conversations";
 export * from "./deadlines";
+export * from "./decision-labels";
 export * from "./decisions";
 export * from "./drafts";
 export * from "./directory";

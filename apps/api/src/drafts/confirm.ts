@@ -95,7 +95,10 @@ export async function cancelDraft(deps: Omit<Deps, "tickets">, draftId: string) 
       confidence: "alta",
       rationale: `Você cancelou o rascunho D-${cancelled.number}.`,
       rules: ["R3"],
+      enforcedRules: [],
       tools: [],
+      source: "server",
+      registered: true,
     },
   );
   return { status: "done" as const, draft: toDraftView(cancelled), message };
@@ -188,7 +191,10 @@ function decisionFor(draft: DraftRow, outcome: "ok" | "recusado"): DecisionRecor
     confidence: "alta",
     rationale: `Você confirmou o rascunho D-${draft.number}.`,
     rules: [...kind.rules],
+    enforcedRules: [],
     tools: [{ name: kind.tool, outcome }],
+    source: "server",
+    registered: true,
   };
 }
 
