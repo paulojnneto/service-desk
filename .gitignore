@@ -4,10 +4,6 @@ node_modules/
 # Testing
 coverage/
 
-# Next.js
-.next/
-out/
-
 # Production
 build/
 dist/
@@ -29,7 +25,6 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
 # Prototype from the hiring process: kept locally, not published (Stage 2 PRD, decision 1)
 docs/prototype/

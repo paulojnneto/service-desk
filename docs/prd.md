@@ -3,7 +3,7 @@
 |         |                                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------------------ |
 | Status  | Approved (2026-10-27)                                                                                  |
-| Version | 0.1 (2026-10-27)                                                                                       |
+| Version | 0.2 (2026-10-27): Stage 2 now uses Vite + React and a separate agent API (Stage 2 PRD, decision 4)     |
 | Source  | Technical challenge "Nexo Assist, the IT service desk agent" (hiring process PRD) and Pencil prototype |
 
 This document turns the challenge into a product with traceable requirements and splits the delivery into stages. Each stage becomes a GitHub issue and gets its own PRD and tech spec under `docs/stages/` (see section 10).
@@ -145,8 +145,8 @@ Each stage is an issue. The criteria below are a summary; the details live in th
 ### Stage 2 — Project skeleton
 
 - **Goal:** give the project the structure that separates UI, agent and services, plus the quality tooling.
-- **Delivery:** monorepo with the web app, the ticket service, the agent package and a shared package; strict TS, lint, formatting, tests and CI; the prototype theme (colors, fonts, icons); simulated LLM mode.
-- **Acceptance criteria:** `pnpm install` and `pnpm dev` start the web app and the service; lint, typecheck, tests and build pass locally and in CI; the chat replies without a key.
+- **Delivery:** monorepo with a client-only UI (Vite + React), a backend API that runs the agent, the ticket service, the agent package and a shared package; strict TS, lint, formatting, tests and CI; the prototype theme (colors, fonts, icons); simulated LLM mode.
+- **Acceptance criteria:** `pnpm install` and `pnpm dev` start the UI, the API and the ticket service; lint, typecheck, tests and build pass locally and in CI; the chat replies without a key; no secret reaches the UI.
 - **Expected result:** anyone who clones the repository runs everything with a few commands, without an LLM key.
 
 ### Stage 3 — Sign-in and employee shell
