@@ -11,7 +11,7 @@ export type InstabilityConfig = {
 
 export const DEV_INSTABILITY: InstabilityConfig = {
   latencyMs: 600,
-  outageRate: 0.05,
+  outageRate: 0.02,
   outageSeconds: 3,
 };
 

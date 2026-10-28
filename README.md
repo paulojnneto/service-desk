@@ -90,7 +90,7 @@ The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (
 - **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
 - **Deadlines** (Annex A, R9) are computed in São Paulo business hours (Monday to Friday, 8:00 to 18:00): critical 1 hour, high 4 business hours, medium 3 and low 5 business days, counted from the last update. Resolved tickets are never overdue; they can be reopened for 7 calendar days.
 - **Idempotent writes:** every `POST` needs an `Idempotency-Key`; a repeat replays the first response, so a retry never creates two tickets.
-- **Legacy behavior:** requests may take up to 600 ms, and 5 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
+- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
 - **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
 
 ## Model

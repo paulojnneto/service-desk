@@ -21,7 +21,7 @@ function fakeClock(randoms: number[]) {
   };
 }
 
-function appWith(clock: ReturnType<typeof fakeClock>["clock"], outageRate = 0.05) {
+function appWith(clock: ReturnType<typeof fakeClock>["clock"], outageRate = 0.02) {
   const app = new Hono();
   app.use(instability({ latencyMs: 600, outageRate, outageSeconds: 3 }, clock));
   app.get("/", (c) => c.json({ ok: true }));
@@ -38,7 +38,7 @@ describe("simulated legacy instability", () => {
   });
 
   it("answers 503 for the whole outage window, then recovers", async () => {
-    // First request draws 0.01 (< 5%): an outage starts.
+    // First request draws 0.01 (< 2%): an outage starts.
     const fake = fakeClock([0.01]);
     const app = appWith(fake.clock);
 
@@ -67,7 +67,7 @@ describe("simulated legacy instability", () => {
 
 describe("instabilityFromEnv", () => {
   it("uses the development defaults", () => {
-    expect(instabilityFromEnv({})).toEqual({ latencyMs: 600, outageRate: 0.05, outageSeconds: 3 });
+    expect(instabilityFromEnv({})).toEqual({ latencyMs: 600, outageRate: 0.02, outageSeconds: 3 });
   });
 
   it("reads the overrides and ignores invalid values", () => {
@@ -77,6 +77,6 @@ describe("instabilityFromEnv", () => {
         LEGACY_OUTAGE_RATE: "abc",
         LEGACY_OUTAGE_SECONDS: "5",
       }),
-    ).toEqual({ latencyMs: 0, outageRate: 0.05, outageSeconds: 5 });
+    ).toEqual({ latencyMs: 0, outageRate: 0.02, outageSeconds: 5 });
   });
 });
