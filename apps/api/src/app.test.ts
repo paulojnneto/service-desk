@@ -38,10 +38,24 @@ describe("agent API", () => {
   });
 
   it("rejects a body that is not valid JSON", async () => {
-    const res = await app.request("/api/chat", { method: "POST", body: "not json" });
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not json",
+    });
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "invalid_json" });
+  });
+
+  it("rejects POST requests that are not JSON (CSRF rule)", async () => {
+    const res = await app.request("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "messages=x",
+    });
+
+    expect(res.status).toBe(415);
   });
 });
 
