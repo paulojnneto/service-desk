@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "4.0.29",
+    "@date-fns/tz": "1.5.0",
     "@mastra/core": "1.79.0",
     "@nexo/shared": "workspace:*",
     "zod": "4.6.7"

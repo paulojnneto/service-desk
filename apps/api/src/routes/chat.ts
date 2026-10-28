@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { handleChatStream } from "@mastra/ai-sdk";
-import { mastra, requestContextFor } from "@nexo/agent";
+import { buildDecisionRecord, mastra, requestContextFor, type AgentServices } from "@nexo/agent";
 import {
   MAX_MESSAGE_LENGTH,
   MESSAGES_PER_SESSION,
+  type Confidence,
   type Person,
   type StoredMessage,
 } from "@nexo/shared";
@@ -15,10 +16,12 @@ import {
 } from "ai";
 import { Hono } from "hono";
 import { z } from "zod";
+import { buildAgentServices } from "../agent-services";
 import { requireRole, type AppEnv } from "../auth";
 import {
   appendEmployeeMessage,
   appendMessage,
+  lastConfidence,
   listMessages,
   type AppendResult,
 } from "../conversations/repository";
@@ -47,13 +50,23 @@ export function parseChatBody(body: unknown): ChatInput | null {
   return { clientId: parsed.data.message.id, parts: [{ type: "text", text }] };
 }
 
-// Everything the agent runs with is decided here, on the server: the stored history and
-// the person from the session. handleChatStream also accepts execution options
-// (instructions, model, memory...), and none of them come from the client.
-export function buildChatParams(history: StoredMessage[], person: Person) {
+// Everything the agent runs with is decided here, on the server: the stored history, the
+// person from the session and the services built for them. handleChatStream also accepts
+// execution options (instructions, model, memory...), and none of them come from the client.
+export function buildChatParams(
+  history: StoredMessage[],
+  person: Person,
+  services: AgentServices,
+  previousConfidence?: Confidence,
+) {
   return {
     messages: history as unknown as UIMessage[],
-    requestContext: requestContextFor(person.id),
+    requestContext: requestContextFor({
+      userId: person.id,
+      firstName: person.name.split(" ")[0] ?? person.name,
+      services,
+      ...(previousConfidence ? { previousConfidence } : {}),
+    }),
   };
 }
 
@@ -85,12 +98,14 @@ export const chatRoutes = new Hono<AppEnv>()
 
     let saved: AppendResult;
     let history: Awaited<ReturnType<typeof listMessages>>;
+    let previousConfidence: Confidence | undefined;
     try {
       saved = await appendEmployeeMessage(db, person.id, input, now());
       if (saved.status === "limit_reached") {
         return c.json({ error: "message_limit_reached", limit: MESSAGES_PER_SESSION }, 409);
       }
       history = await listMessages(db, saved.conversation.id);
+      previousConfidence = await lastConfidence(db, saved.conversation.id);
     } catch (error) {
       console.error("Could not save the message:", error);
       return c.json({ error: "unavailable" }, 503);
@@ -113,9 +128,18 @@ export const chatRoutes = new Hono<AppEnv>()
     }
 
     const agentHistory = toAgentHistory(history);
+    const services = buildAgentServices({
+      db,
+      tickets: c.get("tickets"),
+      employeeId: person.id,
+      conversationId: saved.conversation.id,
+      now,
+    });
     let reply: ReadableStream<UIMessageChunk>;
     try {
-      reply = await c.get("runAgent")(buildChatParams(agentHistory, person));
+      reply = await c.get("runAgent")(
+        buildChatParams(agentHistory, person, services, previousConfidence),
+      );
     } catch (error) {
       // The message stays saved; the UI's retry sends it again without counting it twice.
       console.error("The agent could not start:", error);
@@ -148,7 +172,13 @@ export const chatRoutes = new Hono<AppEnv>()
           await appendMessage(
             db,
             person.id,
-            { id: responseMessage.id, author: "agent", parts: responseMessage.parts },
+            {
+              id: responseMessage.id,
+              author: "agent",
+              parts: responseMessage.parts,
+              // Built from what actually ran (stage 6 PRD, S-06.14).
+              decision: buildDecisionRecord(responseMessage.parts),
+            },
             now(),
           );
         } catch (error) {
