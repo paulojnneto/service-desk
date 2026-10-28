@@ -6,6 +6,7 @@ import type { Db } from "./db/connect";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes, runNexoAssist, type RunAgent } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
+import { draftRoutes } from "./routes/drafts";
 
 export type AppOptions = {
   db: Db;
@@ -39,6 +40,7 @@ export function createApp({
   app.route("/api/auth", authRoutes);
   app.route("/api/chat", chatRoutes);
   app.route("/api/conversations", conversationRoutes);
+  app.route("/api/drafts", draftRoutes);
 
   return app;
 }
