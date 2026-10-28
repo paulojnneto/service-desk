@@ -6,6 +6,7 @@
     "node": ">=22.13 <23"
   },
   "scripts": {
+    "bootstrap": "node scripts/dev-setup.mjs",
     "dev": "pnpm --parallel --filter @nexo/web --filter @nexo/api --filter @nexo/tickets dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
@@ -25,6 +26,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.7",
     "globals": "^17.13.0",
+    "jose": "6.2.12",
     "prettier": "3.9.10",
     "typescript": "^5.9.3",
     "typescript-eslint": "8.72.1",

@@ -1,11 +1,31 @@
 import { Hono } from "hono";
+import type { CryptoKey } from "jose";
+import type { Db } from "./db/connect";
+import type { TicketsEnv } from "./env-types";
+import { serviceToken } from "./middleware/service-token";
+
+export type AppOptions = {
+  db: Db;
+  tokenPublicKey: CryptoKey;
+  now?: () => Date;
+};
 
 // Simulated ticket service (the "legacy system"), separate from the agent.
 // The app is built by a function so tests can call app.request() without opening a port.
-export function createApp() {
-  const app = new Hono();
+export function createApp({ db, tokenPublicKey, now = () => new Date() }: AppOptions) {
+  const app = new Hono<TicketsEnv>();
 
   app.get("/health", (c) => c.json({ status: "ok" }));
 
+  // Everything else needs a token from the API.
+  const api = new Hono<TicketsEnv>();
+  api.use(async (c, next) => {
+    c.set("db", db);
+    c.set("now", now);
+    await next();
+  });
+  api.use(serviceToken(tokenPublicKey));
+
+  app.route("/", api);
   return app;
 }
