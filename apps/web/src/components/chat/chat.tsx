@@ -8,7 +8,7 @@ const ACTION_LABELS: Record<string, string> = {
   consultarHorario: "consultou o horário do service desk",
 };
 
-export function App() {
+export function Chat() {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),

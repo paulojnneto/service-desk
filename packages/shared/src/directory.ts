@@ -24,6 +24,16 @@ export type Analyst = {
 export type Person = Employee | Analyst;
 export type Role = Person["role"];
 
+// The narrow view of the signed-in person that the API sends to the UI.
+export type SessionUser = {
+  id: string;
+  role: Role;
+  name: string;
+  firstName: string;
+  email: string;
+  initials: string;
+};
+
 // The employees and avatar colors come from the analyst console in the prototype.
 export const PEOPLE: readonly Person[] = [
   employee("ana.souza", "Ana Souza", "Financeiro", { bg: "#DCE9F7", fg: "#0062C4" }),
