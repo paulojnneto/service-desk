@@ -1,11 +1,23 @@
 import type { MessageMetadata } from "@nexo/shared";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import { Check, LoaderCircle } from "lucide-react";
+import { DraftBlock, type DraftActions } from "./draft-block";
+import { draftOf } from "./draft-of";
 
-// Label of each tool in the action line above the agent's reply.
+// Label of each tool in the action line above the agent's reply. registrarDecisao is not an
+// action the employee needs to see; Stage 8 shows the decision itself.
 const ACTION_LABELS: Record<string, string> = {
   consultarHorario: "consultou o horário do service desk",
+  buscarNaCentral: "buscou na central de ajuda",
+  listarMeusChamados: "consultou seus chamados",
+  consultarChamado: "consultou o chamado",
+  prepararChamado: "montou o rascunho",
+  prepararAtualizacao: "montou o rascunho",
+  prepararReabertura: "verificou a reabertura",
+  descartarRascunho: "descartou o rascunho",
+  transferirParaAnalista: "chamou um analista",
 };
+const HIDDEN_TOOLS = new Set(["registrarDecisao"]);
 
 function messageText(message: UIMessage): string {
   return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
@@ -22,8 +34,11 @@ export function UserMessage({ message }: { message: UIMessage }) {
 }
 
 // Replies from the agent, or from an analyst once the conversation is handed off (Stage 9).
-export function AgentMessage({ message }: { message: UIMessage }) {
-  const tools = message.parts.filter(isToolUIPart);
+export function AgentMessage({ message, drafts }: { message: UIMessage; drafts?: DraftActions }) {
+  const tools = message.parts
+    .filter(isToolUIPart)
+    .filter((part) => !HIDDEN_TOOLS.has(getToolName(part)));
+  const draft = message.parts.map(draftOf).findLast(Boolean) ?? null;
   const text = messageText(message);
   if (!text && tools.length === 0) return null;
   const metadata = message.metadata as MessageMetadata | undefined;
@@ -44,6 +59,7 @@ export function AgentMessage({ message }: { message: UIMessage }) {
         ))}
       </StatusLine>
       {text && <AgentBubble>{text}</AgentBubble>}
+      {draft && drafts && <DraftBlock draft={draft} actions={drafts} />}
     </div>
   );
 }

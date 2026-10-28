@@ -1,4 +1,4 @@
-import type { ConversationView, SessionUser } from "@nexo/shared";
+import type { ConversationView, DraftView, SessionUser, StoredMessage } from "@nexo/shared";
 
 // Calls to the agent API. Same origin: in development Vite forwards /api to it.
 
@@ -37,6 +37,30 @@ export async function closeConversation(): Promise<void> {
   const res = await postJson("/api/conversations/current/close", {});
   if (res.status === 401) throw new SignedOutError();
   if (!res.ok) throw new ApiUnavailableError();
+}
+
+export type DraftDecision =
+  | { ok: true; draft: DraftView; message: StoredMessage | null }
+  | { ok: false; error: string; message?: StoredMessage | null };
+
+// "Confirmar" or "Cancelar" on a draft: the server writes the ticket, never the model.
+export async function decideDraft(
+  id: string,
+  action: "confirm" | "cancel",
+): Promise<DraftDecision> {
+  let res: Response;
+  try {
+    res = await postJson(`/api/drafts/${encodeURIComponent(id)}/${action}`, {});
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    draft?: DraftView;
+    message?: StoredMessage | null;
+    error?: string;
+  };
+  if (res.ok && body.draft) return { ok: true, draft: body.draft, message: body.message ?? null };
+  return { ok: false, error: body.error ?? "unavailable", message: body.message ?? null };
 }
 
 export async function signIn(input: {
