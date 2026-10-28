@@ -3,6 +3,9 @@ import { z } from "zod";
 import { errorForStatus, TicketServiceError } from "./errors";
 import type { TokenSigner } from "./signer";
 
+// A write can carry the caller's idempotency key instead of a fresh one.
+export type WriteOptions = { idempotencyKey?: string };
+
 export type RetryPolicy = {
   delaysMs: number[]; // wait before each retry; attempts = delays + 1
   timeoutMs: number; // per attempt
@@ -43,9 +46,11 @@ export function createTicketsClient(options: TicketsClientOptions) {
     path: string,
     schema: z.ZodType<T>,
     body?: unknown,
+    givenKey?: string,
   ): Promise<T> {
     // One key per logical write, reused on every retry, so the service never acts twice.
-    const idempotencyKey = method === "POST" ? crypto.randomUUID() : undefined;
+    // A caller can give its own (a draft's id), so a write repeated later replays too.
+    const idempotencyKey = method === "POST" ? (givenKey ?? crypto.randomUUID()) : undefined;
 
     for (let attempt = 0; ; attempt++) {
       let res: Response | undefined;
@@ -82,8 +87,8 @@ export function createTicketsClient(options: TicketsClientOptions) {
   return {
     // Every call is made on behalf of one person, who becomes the token's subject.
     as(requesterId: string) {
-      const ticket = (method: "GET" | "POST", path: string, body?: unknown) =>
-        request(requesterId, method, path, TicketBody, body).then((r) => r.ticket);
+      const ticket = (method: "GET" | "POST", path: string, body?: unknown, key?: string) =>
+        request(requesterId, method, path, TicketBody, body, key).then((r) => r.ticket);
 
       return {
         list: (scope: "open" | "all" = "all") =>
@@ -91,13 +96,29 @@ export function createTicketsClient(options: TicketsClientOptions) {
             (r) => r.tickets,
           ),
         get: (number: string) => ticket("GET", `/tickets/${encodeURIComponent(number)}`),
-        create: (input: CreateTicketInput) => ticket("POST", "/tickets", input),
-        addUpdate: (number: string, message: string) =>
-          ticket("POST", `/tickets/${encodeURIComponent(number)}/updates`, { message }),
-        reopen: (number: string, reason: string) =>
-          ticket("POST", `/tickets/${encodeURIComponent(number)}/reopen`, { reason }),
-        transfer: (number: string, summary: string) =>
-          ticket("POST", `/tickets/${encodeURIComponent(number)}/transfers`, { summary }),
+        create: (input: CreateTicketInput, write?: WriteOptions) =>
+          ticket("POST", "/tickets", input, write?.idempotencyKey),
+        addUpdate: (number: string, message: string, write?: WriteOptions) =>
+          ticket(
+            "POST",
+            `/tickets/${encodeURIComponent(number)}/updates`,
+            { message },
+            write?.idempotencyKey,
+          ),
+        reopen: (number: string, reason: string, write?: WriteOptions) =>
+          ticket(
+            "POST",
+            `/tickets/${encodeURIComponent(number)}/reopen`,
+            { reason },
+            write?.idempotencyKey,
+          ),
+        transfer: (number: string, summary: string, write?: WriteOptions) =>
+          ticket(
+            "POST",
+            `/tickets/${encodeURIComponent(number)}/transfers`,
+            { summary },
+            write?.idempotencyKey,
+          ),
         searchArticles: (question: string) =>
           request(
             requesterId,

@@ -115,6 +115,24 @@ describe("tickets client", () => {
     );
   });
 
+  it("sends the caller's idempotency key on every attempt and on a later repeat", async () => {
+    const service = fakeService([
+      json(503, { error: "unavailable" }),
+      json(201, { ticket: TICKET }),
+      json(201, { ticket: TICKET }),
+    ]);
+    const client = clientWith(service).as("ana.souza");
+
+    await client.addUpdate("INC-20311", "a", { idempotencyKey: "draft-1" });
+    await client.addUpdate("INC-20311", "a", { idempotencyKey: "draft-1" });
+
+    expect(service.calls.map((call) => call.headers["idempotency-key"])).toEqual([
+      "draft-1",
+      "draft-1",
+      "draft-1",
+    ]);
+  });
+
   it("never retries a 4xx and turns it into a typed error with the service's code", async () => {
     const notFound = fakeService([json(404, { error: "not_found" })]);
     const conflict = fakeService([json(409, { error: "reopen_window_expired" })]);
