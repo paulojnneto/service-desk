@@ -1,0 +1,17 @@
+{
+  "name": "@nexo/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mastra/core": "1.79.0",
+    "@nexo/shared": "workspace:*",
+    "zod": "4.6.7"
+  }
+}
