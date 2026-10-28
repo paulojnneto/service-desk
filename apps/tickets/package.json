@@ -9,11 +9,14 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/scripts/migrate.ts"
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:seed": "tsx src/scripts/seed.ts"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
     "@hono/node-server": "2.1.5",
     "@nexo/shared": "workspace:*",
+    "date-fns": "4.4.0",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.14",
     "jose": "6.2.12",
@@ -21,7 +24,6 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@date-fns/tz": "1.5.0",
     "@electric-sql/pglite": "0.5.10",
     "@types/pg": "8.23.1",
     "drizzle-kit": "0.31.11",
