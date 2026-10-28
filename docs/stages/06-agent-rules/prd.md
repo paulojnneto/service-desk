@@ -1,10 +1,14 @@
 # Stage 06 — Agent and service desk rules: PRD
 
-|        |                                                                                |
-| ------ | ------------------------------------------------------------------------------ |
-| Issue  | [#6](https://github.com/paulojnneto/service-desk/issues/6)                     |
-| Status | Revision 2 — approved on 2026-10-28 (revision 1 approved earlier the same day) |
-| Covers | M3, F1–F5, R1–R8, M7 (decision record), N10, N11                               |
+|        |                                                                                       |
+| ------ | ------------------------------------------------------------------------------------- |
+| Issue  | [#6](https://github.com/paulojnneto/service-desk/issues/6)                            |
+| Status | Revision 3 — approved on 2026-10-28 (revisions 1 and 2 approved earlier the same day) |
+| Covers | M3, F1–F5, R1–R8, M7 (decision record), N10, N11                                      |
+
+## Changes in revision 3
+
+- **Decision 7, real model:** the manual run uses OpenAI GPT-5.5 (`openai/gpt-5.5`) instead of Claude Sonnet 5.5. Decided on 2026-10-28 because the key available for the run is an OpenAI one. Either model validates that the flows work outside the simulated model; Stage 11 still compares providers with measured costs.
 
 ## Changes in revision 2
 
@@ -77,11 +81,11 @@ At the end of this stage, the agent handles stories F1 to F5 in the chat: it ans
 
 - Stage 4: the ticket service, the help center, the deadline rules and `@nexo/tickets-client`.
 - Stage 5: stored conversations, the "waiting for an analyst" state that pauses the agent, and the server-side history.
-- A provider key (for example `ANTHROPIC_API_KEY`) in `apps/api/.env.local` for the manual run with a real model; nothing else needs it.
+- A provider key (`OPENAI_API_KEY` for the reference model) in `apps/api/.env.local` for the manual run with a real model; nothing else needs it.
 
 ## Decisions
 
-Resolved on 2026-10-28, all following the recommendation: confirmation is an explicit UI action checked and executed by the server; priority comes from a fixed impact × urgency table in code; the creation draft always runs the duplicate check and lists open tickets of the same category; confidence has three levels (alta, média, baixa); the handoff happens in this stage; out-of-scope requests go to fixed, fictional RH, Financeiro and Facilities channels; Claude Sonnet 5.5 is the reference real model for this stage; the agent asks for the operating system when an answer depends on it.
+Resolved on 2026-10-28, all following the recommendation: confirmation is an explicit UI action checked and executed by the server; priority comes from a fixed impact × urgency table in code; the creation draft always runs the duplicate check and lists open tickets of the same category; confidence has three levels (alta, média, baixa); the handoff happens in this stage; out-of-scope requests go to fixed, fictional RH, Financeiro and Facilities channels; OpenAI GPT-5.5 is the reference real model for this stage (Claude Sonnet 5.5 until revision 3); the agent asks for the operating system when an answer depends on it.
 
 ## Open questions (resolved)
 
@@ -91,5 +95,5 @@ Resolved on 2026-10-28, all following the recommendation: confirmation is an exp
 4. **Confidence scale.** _(Recommended: three levels, alta, média and baixa, each with a written meaning, instead of a percentage. Models are poorly calibrated on numbers, and levels are easier to read in Stage 8 and to act on: "baixa" triggers the clarifying question and then the handoff.)_
 5. **Handoff in this stage or in Stage 9.** _(Recommended: here. The agent decides and records the handoff, writes the summary, records the transfer on the ticket and moves the conversation to "waiting for an analyst", which completes F5 from the employee's side. Stage 9 adds the console where the analyst picks it up.)_
 6. **Where to redirect out-of-scope requests.** _(Recommended: fixed, fictional Nexo channels in Portuguese, one per area: RH (portal de RH, ramal 4100), Financeiro (portal de reembolsos, ramal 4200) and Facilities (portal de facilities, ramal 4300); anything else gets a polite refusal. They live in shared data, not in the prompt only.)_
-7. **Real model for the manual validation.** _(Recommended: Claude Sonnet 5.5 (`anthropic/claude-sonnet-5-5`) as the reference during this stage: strong at tool use for a fair cost. Stage 11 compares it with Haiku 5.5 and Opus 5.5 using measured costs.)_
+7. **Real model for the manual validation.** _(Recommended: Claude Sonnet 5.5 (`anthropic/claude-sonnet-5-5`) as the reference during this stage: strong at tool use for a fair cost. Stage 11 compares it with Haiku 5.5 and Opus 5.5 using measured costs.)_ **Revision 3:** OpenAI GPT-5.5 (`openai/gpt-5.5`), because the key available for the run is an OpenAI one; Stage 11 compares providers.
 8. **Operating system in the VPN flow.** The prototype's agent knows Ana has Windows 11, but the directory has no devices. _(Recommended: the agent asks when the answer depends on it, or uses what the employee already said; no device inventory in this stage.)_
