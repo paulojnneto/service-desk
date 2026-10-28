@@ -68,10 +68,12 @@ async function confirmPending() {
 describe("simulated flows", () => {
   it("VPN error 809 on Windows 11 ends in a high-priority draft, created only after Confirmar", async () => {
     const asked = await say("Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.");
-    expect(asked).toContain("versão do Windows");
+    expect(asked).toContain("depende do sistema");
+    expect(await lastQuestion()).toMatchObject({ options: ["Windows 10", "Windows 11"] });
     expect((await lastDecision())?.tools.map((t) => t.name)).toEqual([
       "listarMeusChamados",
       "buscarNaCentral",
+      "perguntar",
     ]);
 
     expect(await say("Windows 11")).toContain("Vou abrir um chamado");

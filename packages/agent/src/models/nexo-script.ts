@@ -52,10 +52,7 @@ function pickFlow(turn: Turn): Flow {
   if (/horario|plantao|que horas|funciona o service desk/.test(user)) return hours;
   if (/quem esta sendo afetado|consegue trabalhar/.test(turn.lastQuestion))
     return createFromAnswers;
-  if (
-    /vpn/.test(user) ||
-    (/versao do windows/.test(normalize(turn.lastAgentText)) && /windows/.test(user))
-  ) {
+  if (/vpn/.test(user) || (/versao do windows/.test(turn.lastQuestion) && /windows/.test(user))) {
     return vpn;
   }
   if (/abrir (um )?chamado|nao funciona|parou|lento|travando|nao liga/.test(user))
@@ -219,9 +216,15 @@ const vpn: Flow = (turn) => {
     );
   }
   if (!/windows 11|win 11/.test(problem)) {
-    return text(
-      "O artigo do erro 809 depende do sistema. Qual a versão do Windows do seu notebook: 10 ou 11?",
-    );
+    if (!turn.results.has("perguntar")) {
+      return tools(
+        call("perguntar", {
+          pergunta: "Qual a versão do Windows do seu notebook?",
+          opcoes: ["Windows 10", "Windows 11"],
+        }),
+      );
+    }
+    return text("O artigo do erro 809 depende do sistema.");
   }
   if (!turn.results.has("perguntar")) {
     return tools(
@@ -301,8 +304,8 @@ const createFromAnswers: Flow = (turn) => {
     ((draft.rascunho ?? {}) as { fields?: { priority?: string; dueAt?: string } }).fields ?? {};
   const why =
     fields.priority === "alta" && /reuniao|cliente|hoje|\d{1,2}h/.test(turn.user)
-      ? `Coloquei prioridade alta por causa do compromisso — a resposta chega até ${formatTime(fields.dueAt)}.`
-      : `Prioridade ${PRIORITY[fields.priority ?? ""] ?? fields.priority}, resposta até ${formatTime(fields.dueAt)}.`;
+      ? `Coloquei prioridade alta por causa do compromisso — a resposta chega até ${formatDue(fields.dueAt)}.`
+      : `Prioridade ${PRIORITY[fields.priority ?? ""] ?? fields.priority}, resposta até ${formatDue(fields.dueAt)}.`;
   return draftAnswer(draft, why);
 };
 
@@ -560,8 +563,11 @@ function formatDate(iso: string | null | undefined): string {
   });
 }
 
-function formatTime(iso: string | undefined): string {
+// Only the time when the deadline is today; the day too when it is not.
+function formatDue(iso: string | undefined): string {
   if (!iso) return "—";
+  const day = (d: Date) => d.toLocaleDateString("pt-BR", { timeZone: TIME_ZONE });
+  if (day(new Date(iso)) !== day(new Date())) return formatDate(iso);
   return new Date(iso).toLocaleString("pt-BR", {
     timeZone: TIME_ZONE,
     hour: "2-digit",
