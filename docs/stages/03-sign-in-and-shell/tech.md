@@ -188,3 +188,14 @@ Then a pull request "Stage 03 — Sign-in and employee shell" with `Closes #3`.
 | A sealed cookie cannot be revoked before it expires                  | Documented trade-off; revisit if Stage 5 adds a session table                                                   |
 | The fix to the chat parameters changes behavior that Stage 2 shipped | It is a security fix with its own commit and test, and it is called out in the PR                               |
 | Pixel fidelity takes many small adjustments                          | Validate against the screenshots at 1440×900, using the spacing values extracted from `nexo.pen`                |
+
+## Deviations during implementation
+
+Recorded after the code, before the pull request.
+
+| Deviation                                                                              | Why                                                                                                               |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `SessionUser` lives in `@nexo/shared` instead of `apps/api`                            | It is the contract between the API and the UI; both import the same type                                          |
+| `useEmployee` lives in `apps/web/src/lib/use-employee.ts` instead of `router.tsx`      | The screens import it and the router imports the screens; keeping it in the router would create a circular import |
+| The chat route also answers `400 invalid_input` when the body has no valid `messages`  | `buildChatParams` validates the body; an unusable body should not reach the agent                                 |
+| Sign-out uses a route action at `/sign-out` that still redirects if the API call fails | Signing out on the screen makes sense even if the API is briefly unreachable; the cookie expires on its own       |
