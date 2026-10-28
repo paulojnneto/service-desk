@@ -23,7 +23,8 @@ import {
 import { decideDraft, editDraft, fetchCurrentConversation } from "../../lib/api";
 import type { DraftActions } from "./cards/draft-card";
 import { NewConversation } from "./new-conversation";
-import { draftsIn } from "./parts";
+import { choiceTexts, draftsIn, waitingQuestion } from "./parts";
+import { useChatShortcuts } from "./use-chat-shortcuts";
 
 // Starting points for the empty chat (stage 3 PRD, decision 2).
 const SUGGESTIONS = [
@@ -196,6 +197,20 @@ export function Chat({
     sendMessage({ text: trimmed });
     setInput("");
   }
+
+  const question = waitingQuestion(messages);
+  const waitingDraftId =
+    draftsIn(messages)
+      .map(current)
+      .findLast((d) => d.status === "pending")?.id ?? null;
+  useChatShortcuts({
+    waitingDraftId: busyDraftId ? null : waitingDraftId,
+    confirm: drafts.confirm,
+    choices: question ? choiceTexts(question) : null,
+    composerEmpty: input.trim() === "",
+    pick: send,
+    enabled: !busy && !limitReached && !withServiceDesk,
+  });
 
   // Picking a ticket or an option is the employee's message (stage 7 PRD, S-07.2, S-07.3).
   const cards: CardContext = {

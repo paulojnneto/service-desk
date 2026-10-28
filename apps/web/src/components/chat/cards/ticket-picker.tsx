@@ -5,7 +5,7 @@ import { CardShell } from "./card-shell";
 
 // Ticket picker (prototype, Screen 3; stage 7 PRD, S-07.2). A single-choice list: picking a
 // ticket sends "NÚMERO · título" as the employee's message. Arrow keys move between tickets,
-// Enter or Space picks.
+// Enter or Space picks; while it waits, the number keys pick too (S-07.9).
 
 export function TicketPicker({
   question,
@@ -83,6 +83,11 @@ export function TicketPicker({
                   {STATUS_LABEL[t.status]}
                 </span>
                 <span className="w-12 text-right text-ink-3">{formatDay(t.openedAt)}</span>
+                {waiting && (
+                  <kbd aria-hidden="true" className="w-3 font-sans text-[11px] text-ink-3">
+                    {i + 1}
+                  </kbd>
+                )}
               </span>
             </div>
           );
