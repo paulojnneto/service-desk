@@ -12,6 +12,7 @@ import {
 import {
   AgentBubble,
   AgentMessage,
+  type CardContext,
   QuickOption,
   StatusLine,
   SystemNote,
@@ -128,6 +129,14 @@ export function Chat({
     setInput("");
   }
 
+  // Picking a ticket or an option is the employee's message (stage 7 PRD, S-07.2, S-07.3).
+  const cards: CardContext = {
+    messages,
+    busy: busy || limitReached || withServiceDesk,
+    onPick: send,
+    drafts,
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -138,7 +147,7 @@ export function Chat({
             if (message.metadata?.author === "system") {
               return <SystemNote key={message.id} message={message} />;
             }
-            return <AgentMessage key={message.id} message={message} drafts={drafts} />;
+            return <AgentMessage key={message.id} message={message} context={cards} />;
           })}
           {status === "submitted" && !withServiceDesk && (
             <StatusLine>
