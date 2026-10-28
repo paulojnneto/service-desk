@@ -5,7 +5,7 @@ import { QuickQuestion } from "./cards/quick-question";
 import { TicketCard } from "./cards/ticket-card";
 import { TicketPicker } from "./cards/ticket-picker";
 import { CardError, CardLoading } from "./cards/card-shell";
-import { DraftBlock, type DraftActions } from "./draft-block";
+import { DraftCard, type DraftActions } from "./cards/draft-card";
 import { actionLabels, cardsOf, chosenIndex, isWaiting, type Card } from "./parts";
 
 function messageText(message: UIMessage): string {
@@ -152,7 +152,9 @@ function CardFor({
       <CardError>Não consegui montar o rascunho: o sistema de chamados não respondeu.</CardError>
     );
   }
-  return card.draft && context ? <DraftBlock draft={card.draft} actions={context.drafts} /> : null;
+  return card.draft && context ? (
+    <DraftCard snapshot={card.draft} actions={context.drafts} />
+  ) : null;
 }
 
 // Notes from the system, such as "conversa transferida" (Stage 9).

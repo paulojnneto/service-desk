@@ -92,3 +92,9 @@ export function daysAgo(iso: string, reference: string): string {
   if (days === 1) return "ontem";
   return `há ${days} dias`;
 }
+
+// A deadline: only the time when it is today, as in the prototype ("resposta até 13:43").
+export function formatDue(iso: string, now = new Date()): string {
+  const day = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(d);
+  return day(new Date(iso)) === day(now) ? formatTime(iso) : formatDayTime(iso);
+}

@@ -1,4 +1,10 @@
-import type { ConversationView, DraftView, SessionUser, StoredMessage } from "@nexo/shared";
+import type {
+  ConversationView,
+  DraftView,
+  EditDraftInput,
+  SessionUser,
+  StoredMessage,
+} from "@nexo/shared";
 
 // Calls to the agent API. Same origin: in development Vite forwards /api to it.
 
@@ -61,6 +67,28 @@ export async function decideDraft(
   };
   if (res.ok && body.draft) return { ok: true, draft: body.draft, message: body.message ?? null };
   return { ok: false, error: body.error ?? "unavailable", message: body.message ?? null };
+}
+
+// "Editar" on a draft (stage 7 PRD, S-07.6): the server checks the fields and recalculates
+// priority and deadline; nothing is written to the ticket service.
+export async function editDraft(id: string, input: EditDraftInput): Promise<DraftDecision> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/drafts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    draft?: DraftView;
+    message?: StoredMessage | null;
+    error?: string;
+  };
+  if (res.ok && body.draft) return { ok: true, draft: body.draft, message: body.message ?? null };
+  return { ok: false, error: body.error ?? "unavailable" };
 }
 
 export async function signIn(input: {

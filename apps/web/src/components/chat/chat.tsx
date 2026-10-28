@@ -7,6 +7,8 @@ import {
   MESSAGES_PER_SESSION,
   type ConversationState,
   type ConversationView,
+  type DraftView,
+  type EditDraftInput,
   type MessageMetadata,
 } from "@nexo/shared";
 import {
@@ -18,10 +20,10 @@ import {
   SystemNote,
   UserMessage,
 } from "./messages";
-import { decideDraft } from "../../lib/api";
-import { draftOf } from "./draft-of";
-import type { DraftActions } from "./draft-block";
+import { decideDraft, editDraft, fetchCurrentConversation } from "../../lib/api";
+import type { DraftActions } from "./cards/draft-card";
 import { NewConversation } from "./new-conversation";
+import { draftsIn } from "./parts";
 
 // Starting points for the empty chat (stage 3 PRD, decision 2).
 const SUGGESTIONS = [
@@ -42,9 +44,12 @@ export function Chat({
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<ConversationState>(conversation?.state ?? "with_agent");
-  const [pendingDraftId, setPendingDraftId] = useState(conversation?.pendingDraftId ?? null);
-  const [deciding, setDeciding] = useState(false);
-  const [draftError, setDraftError] = useState<string | null>(null);
+  // Every draft in its current state, from the server (stage 7 PRD, S-07.7).
+  const [draftsById, setDraftsById] = useState<Record<string, DraftView>>(() =>
+    byId(conversation?.drafts ?? []),
+  );
+  const [busyDraftId, setBusyDraftId] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<DraftActions["error"]>(null);
   const revalidator = useRevalidator();
   const { messages, setMessages, sendMessage, regenerate, status, error } = useChat<ChatMessage>({
     // The history comes from the server (stage 5 PRD, S-05.5).
@@ -61,10 +66,27 @@ export function Chat({
       if (part.type === "data-conversation-state") setState((part.data as StatePart).state);
     },
     onFinish: ({ message }) => {
-      // A new draft replaces the one waiting (stage 6 PRD, S-06.6).
-      const draft = message.parts.map(draftOf).findLast(Boolean);
-      if (draft?.status === "pending") {
-        setPendingDraftId(draft.id);
+      // A new draft replaces the one waiting, and a discarded one is cancelled (S-06.6).
+      const prepared = draftsIn([message]);
+      const discarded = message.parts.some(
+        (part) =>
+          isToolUIPart(part) &&
+          getToolName(part) === "descartarRascunho" &&
+          part.state === "output-available" &&
+          (part.output as { descartado?: boolean }).descartado,
+      );
+      if (prepared.length > 0 || discarded) {
+        setDraftsById((all) => {
+          const closed = Object.fromEntries(
+            Object.values(all)
+              .filter((d) => d.status === "pending")
+              .map((d) => [
+                d.id,
+                { ...d, status: prepared.length > 0 ? "superseded" : "cancelled" },
+              ]),
+          ) as Record<string, DraftView>;
+          return { ...all, ...closed, ...byId(prepared) };
+        });
         setDraftError(null);
       }
       // After a handoff the agent stays quiet (S-06.12).
@@ -93,33 +115,79 @@ export function Chat({
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, status]);
 
+  // The draft as it is now: the tool part only has it as it was prepared.
+  const current = (draft: DraftView) => draftsById[draft.id] ?? draft;
+
+  // After a refusal, reads the real state of the drafts again.
+  async function refreshDrafts() {
+    try {
+      const fresh = await fetchCurrentConversation();
+      if (fresh) setDraftsById((all) => ({ ...all, ...byId(fresh.drafts) }));
+    } catch {
+      // The card keeps what it had; the next action answers again.
+    }
+  }
+
+  function addReply(reply: unknown) {
+    if (reply) setMessages((all) => [...all, reply as ChatMessage]);
+  }
+
   async function decide(draftId: string, action: "confirm" | "cancel") {
-    setDeciding(true);
+    setBusyDraftId(draftId);
     setDraftError(null);
     const result = await decideDraft(draftId, action);
-    setDeciding(false);
-    const reply = result.message;
-    if (reply) setMessages((all) => [...all, reply as ChatMessage]);
-    if (result.ok || result.error === "ticket_conflict") {
-      setPendingDraftId(null);
+    setBusyDraftId(null);
+    addReply(result.message);
+    if (result.ok) {
+      setDraftsById((all) => ({ ...all, [draftId]: result.draft }));
       return;
     }
-    if (result.error === "draft_closed") {
-      setPendingDraftId(null);
+    if (result.error === "ticket_conflict" || result.error === "draft_closed") {
+      await refreshDrafts();
       return;
     }
-    setDraftError(
-      result.error === "draft_in_progress"
-        ? "Já estou registrando este rascunho."
-        : "Não consegui registrar agora. O rascunho continua aqui; tente de novo em instantes.",
-    );
+    setDraftError({
+      id: draftId,
+      message:
+        result.error === "draft_in_progress"
+          ? "Já estou registrando este rascunho."
+          : "Não consegui registrar agora. O rascunho continua aqui; tente de novo em instantes.",
+    });
+  }
+
+  async function save(draftId: string, edit: EditDraftInput): Promise<boolean> {
+    setBusyDraftId(draftId);
+    setDraftError(null);
+    const result = await editDraft(draftId, edit);
+    setBusyDraftId(null);
+    if (result.ok) {
+      setDraftsById((all) => ({ ...all, [draftId]: result.draft }));
+      addReply(result.message);
+      return true;
+    }
+    if (result.error === "draft_closed") await refreshDrafts();
+    setDraftError({
+      id: draftId,
+      message:
+        result.error === "invalid_input"
+          ? "Confira os campos destacados."
+          : result.error === "draft_closed"
+            ? "Este rascunho não pode mais ser editado."
+            : result.error === "draft_in_progress"
+              ? "Já estou registrando este rascunho."
+              : "Não consegui salvar agora. Tente de novo em instantes.",
+    });
+    return false;
   }
 
   const drafts: DraftActions = {
-    pendingDraftId,
-    busy: deciding || busy,
+    current,
+    busyId: busyDraftId,
     error: draftError,
-    decide,
+    disabled: busy || withServiceDesk,
+    confirm: (id) => void decide(id, "confirm"),
+    cancel: (id) => void decide(id, "cancel"),
+    save,
   };
 
   function send(text: string) {
@@ -301,4 +369,8 @@ function ChatError({
       )}
     </div>
   );
+}
+
+function byId(drafts: DraftView[]): Record<string, DraftView> {
+  return Object.fromEntries(drafts.map((d) => [d.id, d]));
 }
