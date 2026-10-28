@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DecisionRecord } from "./decisions";
+import type { DraftView } from "./drafts";
 
 // Contracts of the stored conversations, shared by the API and the UI (stage 5 tech spec).
 
@@ -42,6 +43,8 @@ export type ConversationView = {
   startedAt: string;
   // The draft waiting for "Confirmar" or "Cancelar", if any.
   pendingDraftId: string | null;
+  // Every draft of the conversation in its current state, oldest first (stage 7 PRD, S-07.7).
+  drafts: DraftView[];
   messages: StoredMessage[];
 };
 

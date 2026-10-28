@@ -21,6 +21,7 @@ export function toDraftView(row: DraftRow): DraftView {
     fields: row.fields,
     duplicates: row.duplicates,
     resultTicket: row.resultTicket,
+    createdAt: row.createdAt.toISOString(),
   });
 }
 

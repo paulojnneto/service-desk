@@ -4,6 +4,7 @@ import {
   type ConversationState,
   type ConversationView,
   type DecisionRecord,
+  type DraftView,
   type StoredMessage,
 } from "@nexo/shared";
 import type { ConversationRow, DecisionRow, MessageRow } from "./repository";
@@ -41,6 +42,7 @@ export function toConversationView(
   rows: MessageRow[],
   decisions: DecisionRow[] = [],
   pendingDraftId: string | null = null,
+  drafts: DraftView[] = [],
 ): ConversationView {
   const byMessage = new Map(decisions.map((d) => [d.messageId, d]));
   return {
@@ -50,6 +52,7 @@ export function toConversationView(
     limit: MESSAGES_PER_SESSION,
     startedAt: conversation.startedAt.toISOString(),
     pendingDraftId,
+    drafts,
     messages: rows.map((row) => toStoredMessage(row, byMessage.get(row.id))),
   };
 }
