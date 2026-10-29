@@ -15,6 +15,13 @@
       "when": 1793200909698,
       "tag": "0001_drafts_and_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793232943658,
+      "tag": "0002_decision_transparency",
+      "breakpoints": true
     }
   ]
 }

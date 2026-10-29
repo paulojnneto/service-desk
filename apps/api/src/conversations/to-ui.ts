@@ -33,11 +33,10 @@ function toDecisionRecord(row: DecisionRow): DecisionRecord {
     confidence: row.confidence as DecisionRecord["confidence"],
     rationale: row.rationale,
     rules: row.rules as DecisionRecord["rules"],
-    // Stored from the decisions migration of stage 8 on.
-    enforcedRules: [],
+    enforcedRules: row.enforcedRules as DecisionRecord["enforcedRules"],
     tools: row.tools as DecisionRecord["tools"],
-    source: "agent",
-    registered: true,
+    source: row.source as DecisionRecord["source"],
+    registered: row.registered,
   };
 }
 

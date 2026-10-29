@@ -1,5 +1,6 @@
 import { TZDate } from "@date-fns/tz";
 import {
+  enforcedRulesOf,
   SLA_BY_PRIORITY,
   TIME_ZONE,
   type DecisionRecord,
@@ -16,7 +17,8 @@ import { findDraft, moveDraft, toDraftView, type DraftRow } from "./repository";
 
 // The only place where a ticket is created, updated or reopened (stage 6 PRD, S-06.5):
 // when the employee confirms a draft. The model is not involved; the reply and its decision
-// record are written by this code and say exactly what the server did.
+// record are written by this code and say exactly what the server did, marked as the
+// server's (stage 8 PRD, S-08.7).
 
 export type DraftOutcome =
   | { status: "done"; draft: DraftView; message: StoredMessage | null }
@@ -71,7 +73,7 @@ export async function confirmDraft(deps: Deps, draftId: string): Promise<DraftOu
     person.id,
     now(),
     successText(draft, ticket),
-    decisionFor(draft, "ok"),
+    decisionFor(draft, "ok", ticket),
     ticket,
   );
   return { status: "done", draft: toDraftView(confirmed ?? draft), message };
@@ -89,17 +91,12 @@ export async function cancelDraft(deps: Omit<Deps, "tickets">, draftId: string) 
     person.id,
     now(),
     `Tudo bem, descartei o rascunho D-${cancelled.number}. Nada foi criado nem alterado.`,
-    {
+    serverDecision({
       intent: intentOf(cancelled),
       action: "cancelou_rascunho",
-      confidence: "alta",
-      rationale: `Você cancelou o rascunho D-${cancelled.number}.`,
-      rules: ["R3"],
-      enforcedRules: [],
-      tools: [],
-      source: "server",
-      registered: true,
-    },
+      rationale: `A pessoa cancelou o rascunho D-${cancelled.number}.`,
+      tools: [{ name: "cancelarRascunho", outcome: "ok", subject: `D-${cancelled.number}` }],
+    }),
   );
   return { status: "done" as const, draft: toDraftView(cancelled), message };
 }
@@ -178,21 +175,32 @@ function intentOf(draft: DraftRow): DecisionRecord["intent"] {
   return "reabrir_chamado";
 }
 
-function decisionFor(draft: DraftRow, outcome: "ok" | "recusado"): DecisionRecord {
+function decisionFor(draft: DraftRow, outcome: "ok" | "recusado", ticket?: Ticket): DecisionRecord {
   const byKind = {
-    create: { action: "criou_chamado", tool: "criarChamado", rules: ["R3", "R4", "R9"] },
-    update: { action: "atualizou_chamado", tool: "atualizarChamado", rules: ["R3", "R9"] },
-    reopen: { action: "reabriu_chamado", tool: "reabrirChamado", rules: ["R3", "R5"] },
+    create: { action: "criou_chamado", tool: "criarChamado" },
+    update: { action: "atualizou_chamado", tool: "atualizarChamado" },
+    reopen: { action: "reabriu_chamado", tool: "reabrirChamado" },
   } as const;
   const kind = byKind[draft.kind as keyof typeof byKind];
-  return {
+  // The ticket it touched: the new one after a creation, the drafted one otherwise.
+  const subject = ticket?.number ?? draft.ticketNumber ?? undefined;
+  return serverDecision({
     intent: intentOf(draft),
     action: kind.action,
+    rationale: `A pessoa confirmou o rascunho D-${draft.number}.`,
+    tools: [{ name: kind.tool, outcome, ...(subject ? { subject } : {}) }],
+  });
+}
+
+// No model judged anything: confidence is alta, every rule comes from the code that ran.
+function serverDecision(
+  decision: Pick<DecisionRecord, "intent" | "action" | "rationale" | "tools">,
+): DecisionRecord {
+  return {
+    ...decision,
     confidence: "alta",
-    rationale: `Você confirmou o rascunho D-${draft.number}.`,
-    rules: [...kind.rules],
-    enforcedRules: [],
-    tools: [{ name: kind.tool, outcome }],
+    rules: [],
+    enforcedRules: enforcedRulesOf(decision.tools),
     source: "server",
     registered: true,
   };

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -118,7 +119,8 @@ export const drafts = pgTable(
   ],
 );
 
-// The decision record of each agent reply (stage 6 PRD, S-06.13).
+// The decision record of each agent reply (stage 6 PRD, S-06.13). Stage 8 adds the rules
+// enforced by code, who decided (the agent or the server) and whether the model registered it.
 export const decisions = pgTable(
   "decisions",
   {
@@ -133,11 +135,18 @@ export const decisions = pgTable(
     confidence: text("confidence").notNull(),
     rationale: text("rationale").notNull(),
     rules: text("rules").array().notNull(),
+    enforcedRules: text("enforced_rules")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     tools: jsonb("tools").notNull(),
+    source: text("source").notNull().default("agent"),
+    registered: boolean("registered").notNull().default(true),
     createdAt: moment("created_at").notNull(),
   },
   (t) => [
     index("decisions_conversation_idx").on(t.conversationId),
     check("decisions_confidence_check", sql`${t.confidence} in ('alta', 'media', 'baixa')`),
+    check("decisions_source_check", sql`${t.source} in ('agent', 'server')`),
   ],
 );
