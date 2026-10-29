@@ -39,7 +39,16 @@ export type CardContext = {
 // Replies from the agent, or from an analyst once the conversation is handed off (Stage 9).
 // As in the prototype, a ticket card comes before the text, a question with options sits in
 // the same bubble as the text, and the picker and the draft follow it.
-export function AgentMessage({ message, context }: { message: UIMessage; context?: CardContext }) {
+export function AgentMessage({
+  message,
+  context,
+  mirrored = false,
+}: {
+  message: UIMessage;
+  context?: CardContext;
+  // The analyst console puts Nexo Assist and analysts on the right (Screens 4 and 5).
+  mirrored?: boolean;
+}) {
   const [explained, setExplained] = useState(false);
   const detailId = useId();
   const labels = actionLabels(message);
@@ -70,8 +79,11 @@ export function AgentMessage({ message, context }: { message: UIMessage; context
   const pick = (choice: string) => context?.onPick(choice);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <StatusLine name={name}>
+    <div className={`flex flex-col gap-1.5 ${mirrored ? "items-end" : ""}`}>
+      <StatusLine
+        name={name}
+        level={metadata?.author === "analyst" ? metadata.authorLevel : undefined}
+      >
         {labels.map((label) => (
           <span key={label.key} className="flex items-center gap-[5px] text-ink-3">
             {label.done ? (
@@ -186,13 +198,21 @@ export function SystemNote({ message }: { message: UIMessage }) {
 export function StatusLine({
   children,
   name = "Nexo Assist",
+  level,
 }: {
   children?: React.ReactNode;
   name?: string;
+  // An analyst's level, "Suporte N2", as in Screen 5 (stage 9 PRD, decision 12).
+  level?: string;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
       <span className="font-semibold text-ink">{name}</span>
+      {level && (
+        <span className="rounded bg-success-soft px-1.5 py-px text-[11.5px] font-medium text-success-text">
+          {level}
+        </span>
+      )}
       {children}
     </div>
   );

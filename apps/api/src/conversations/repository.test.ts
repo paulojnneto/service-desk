@@ -2,12 +2,16 @@ import { MESSAGES_PER_SESSION } from "@nexo/shared";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../db/connect";
 import { createTestDb, resetTestDb } from "../db/test-db";
+import { sql } from "drizzle-orm";
 import {
   appendEmployeeMessage,
   appendMessage,
   closeOpenConversation,
   findOpenConversation,
+  handOffConversation,
+  listHandoffs,
   listMessages,
+  setConversationState,
 } from "./repository";
 import { toAgentHistory, toConversationView } from "./to-ui";
 
@@ -90,7 +94,7 @@ describe("appendEmployeeMessage", () => {
 });
 
 describe("history", () => {
-  it("comes back in order with authors, and the agent reads only employee and agent messages", async () => {
+  it("comes back in order with authors; the agent reads people and notes with a prefix", async () => {
     await send("ana.souza", "c1", "pergunta");
     await appendMessage(db, "ana.souza", { author: "agent", parts: text("resposta") }, now);
     await appendMessage(
@@ -112,12 +116,66 @@ describe("history", () => {
       ["assistant", "system"],
     ]);
     expect(view.messages[2]?.metadata.authorName).toBe("Rafael Lima");
-    expect(toAgentHistory(rows).map((m) => m.parts)).toEqual([text("pergunta"), text("resposta")]);
+    // Stage 9 (S-09.11): what a person or the system wrote reaches the agent, marked as such.
+    expect(toAgentHistory(rows).map((m) => [m.role, m.parts])).toEqual([
+      ["user", text("pergunta")],
+      ["assistant", text("resposta")],
+      ["assistant", text("[Analista Rafael Lima] assumi")],
+      ["assistant", text("[Nota do sistema] transferida")],
+    ]);
   });
 
   it("does not append to a conversation that is not open", async () => {
     expect(await appendMessage(db, "ana.souza", { author: "agent", parts: text("x") }, now)).toBe(
       null,
     );
+  });
+});
+
+describe("handOffConversation", () => {
+  const handoff = {
+    reason: "chamado_vencido",
+    summary: "INC-20311 sem atualização há 6 dias; Ana quer um analista.",
+    ticketNumber: "INC-20311",
+  } as const;
+
+  it("moves the state, stores the summary and leaves a note, together", async () => {
+    await send("ana.souza", "c1");
+    const open = await findOpenConversation(db, "ana.souza");
+
+    expect(await handOffConversation(db, open!.id, handoff, now)).toBe(true);
+
+    expect((await findOpenConversation(db, "ana.souza"))?.state).toBe("waiting_analyst");
+    expect(await listHandoffs(db, open!.id)).toEqual([
+      expect.objectContaining({ ...handoff, conversationId: open!.id, createdAt: now }),
+    ]);
+    const note = (await listMessages(db, open!.id)).at(-1);
+    expect(note).toMatchObject({
+      author: "system",
+      parts: text("Conversa transferida para o service desk."),
+    });
+  });
+
+  it("changes nothing when the conversation is not with the agent", async () => {
+    await send("ana.souza", "c1");
+    const open = await findOpenConversation(db, "ana.souza");
+    await handOffConversation(db, open!.id, handoff, now);
+
+    expect(await handOffConversation(db, open!.id, handoff, now)).toBe(false);
+    await setConversationState(db, "ana.souza", "with_analyst", now, "rafael.lima");
+    expect(await handOffConversation(db, open!.id, handoff, now)).toBe(false);
+
+    expect(await listHandoffs(db, open!.id)).toHaveLength(1);
+    expect((await findOpenConversation(db, "ana.souza"))?.state).toBe("with_analyst");
+  });
+
+  it("is refused by the database for a held conversation without a holder, or a holder elsewhere", async () => {
+    await send("ana.souza", "c1");
+    await expect(
+      db.execute(sql`update conversations set state = 'with_analyst'`),
+    ).rejects.toThrow();
+    await expect(
+      db.execute(sql`update conversations set holder_id = 'rafael.lima'`),
+    ).rejects.toThrow();
   });
 });

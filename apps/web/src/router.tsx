@@ -4,7 +4,7 @@ import { PageLoading } from "./components/page-loading";
 import { RouteError } from "./components/route-error";
 import { fetchSessionUser, signOut } from "./lib/api";
 import { redirectFor, type Area } from "./lib/guards";
-import { AnalystLanding } from "./routes/analyst/landing";
+import { ConsolePage } from "./routes/analyst/console";
 import { EmployeeLayout } from "./routes/employee/layout";
 import { ProfilePage } from "./routes/employee/profile";
 import { SupportPage } from "./routes/employee/support";
@@ -45,11 +45,14 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    // The analyst console (Screens 4 and 5); the opened conversation is in the URL.
+    id: "analyst",
     path: "/console",
     loader: areaLoader("analyst"),
-    Component: AnalystLanding,
+    Component: ConsolePage,
     HydrateFallback: PageLoading,
     ErrorBoundary: RouteError,
+    children: [{ index: true }, { path: ":conversationId" }],
   },
   {
     path: "/sign-out",

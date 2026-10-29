@@ -57,6 +57,11 @@ export function findPersonById(id: string): Person | undefined {
 }
 
 // First letter of the first and last names: "Ana Souza" -> "AS".
+// How an analyst's level reads next to their name (stage 9 PRD, decision 12).
+export function analystLevelLabel(level: Analyst["level"]): string {
+  return `Suporte ${level}`;
+}
+
 export function initials(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "";

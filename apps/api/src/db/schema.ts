@@ -24,6 +24,9 @@ export const conversations = pgTable(
     state: text("state").notNull().default("with_agent"),
     // Messages sent by the employee, the 30-message limit (stage 5 PRD, S-05.9).
     employeeMessages: integer("employee_messages").notNull().default(0),
+    // The analyst holding the conversation, only while "with_analyst" (stage 9 tech spec).
+    holderId: text("holder_id"),
+    heldSince: moment("held_since"),
     startedAt: moment("started_at").notNull(),
     updatedAt: moment("updated_at").notNull(),
     closedAt: moment("closed_at"),
@@ -38,6 +41,33 @@ export const conversations = pgTable(
       sql`${t.state} in ('with_agent', 'waiting_analyst', 'with_analyst', 'closed')`,
     ),
     check("conversations_limit_check", sql`${t.employeeMessages} between 0 and 30`),
+    check(
+      "conversations_holder_check",
+      sql`(${t.state} = 'with_analyst') = (${t.holderId} is not null)`,
+    ),
+  ],
+);
+
+// Every handoff to the service desk, with the agent's summary (stage 9 PRD, S-09.1). A
+// conversation can be handed off, handed back and handed off again.
+export const handoffs = pgTable(
+  "handoffs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    reason: text("reason").notNull(),
+    summary: text("summary").notNull(),
+    ticketNumber: text("ticket_number"),
+    createdAt: moment("created_at").notNull(),
+  },
+  (t) => [
+    index("handoffs_conversation_idx").on(t.conversationId, t.createdAt),
+    check(
+      "handoffs_reason_check",
+      sql`${t.reason} in ('pedido_do_funcionario', 'caso_critico', 'chamado_vencido', 'baixa_confianca')`,
+    ),
   ],
 );
 

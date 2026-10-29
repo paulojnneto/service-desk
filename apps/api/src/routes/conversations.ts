@@ -1,13 +1,17 @@
 import { Hono } from "hono";
 import { requireRole, type AppEnv } from "../auth";
+import { holderFor, type ConversationUpdates } from "@nexo/shared";
 import {
   closeOpenConversation,
+  findLatestConversation,
   findOpenConversation,
   listDecisions,
   listMessages,
+  messagesAfter,
 } from "../conversations/repository";
 import { findWaitingDraft, listDrafts } from "../drafts/repository";
-import { toConversationView } from "../conversations/to-ui";
+import { toConversationView, toStoredMessage } from "../conversations/to-ui";
+import { After } from "./analyst";
 
 // The employee's open conversation. No route takes a conversation id: it is always the
 // open one of the session's person, so another person's conversation cannot be named
@@ -31,6 +35,31 @@ export const conversationRoutes = new Hono<AppEnv>()
       });
     } catch (error) {
       console.error("Could not load the conversation:", error);
+      return c.json({ error: "unavailable" }, 503);
+    }
+  })
+  // What changed since the chat's last message (stage 9 PRD, decision 1): the state, who
+  // holds it, and the analysts' and the system's messages. The employee's own messages are
+  // already on screen and the agent's arrive by the stream. It reads the latest conversation,
+  // so a chat closed by an analyst learns it.
+  .get("/current/updates", async (c) => {
+    const db = c.get("db");
+    try {
+      const latest = await findLatestConversation(db, c.get("person")!.id);
+      if (!latest) return c.json({ conversation: null });
+      const rows = await messagesAfter(db, latest.id, After.parse(c.req.query("after")), [
+        "analyst",
+        "system",
+      ]);
+      const updates: ConversationUpdates = {
+        conversationId: latest.id,
+        state: latest.state as ConversationUpdates["state"],
+        holder: holderFor(latest.holderId),
+        messages: rows.map((row) => toStoredMessage(row)),
+      };
+      return c.json(updates);
+    } catch (error) {
+      console.error("Could not read the conversation's updates:", error);
       return c.json({ error: "unavailable" }, 503);
     }
   })

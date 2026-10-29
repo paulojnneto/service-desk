@@ -1,6 +1,6 @@
 import type { AgentServices } from "@nexo/agent";
 import type { TicketsClient } from "@nexo/tickets-client";
-import { setConversationState } from "./conversations/repository";
+import { handOffConversation } from "./conversations/repository";
 import type { Db } from "./db/connect";
 import { discardWaitingDraft, prepareDraft } from "./drafts/repository";
 
@@ -27,19 +27,36 @@ export function buildAgentServices(deps: {
       prepare: (input) => prepareDraft(db, { employeeId, conversationId }, input, now()),
       discard: () => discardWaitingDraft(db, conversationId, now()),
     },
-    // The only write the model can trigger (stage 6 PRD, S-06.12): the transfer event on the
-    // employee's ticket, then the state that keeps the agent quiet.
+    // The only write the model can trigger (stage 6 PRD, S-06.12). The related ticket must
+    // be the employee's: not found (or someone else's) goes back to the tool. Then the state,
+    // the summary and the note in one transaction (stage 9 PRD, S-09.1), and the transfer
+    // event on the ticket last: if the ticket service is down, the employee still gets an
+    // analyst, and the handoff keeps the ticket.
     handoff: async ({ trigger, summary, ticketNumber }) => {
       if (ticketNumber) {
         try {
-          await asEmployee.transfer(ticketNumber, `[${trigger}] ${summary}`);
+          await asEmployee.get(ticketNumber);
         } catch (error) {
-          // A closed ticket takes no transfer event, but the employee still gets an analyst.
-          // Not found (or someone else's) and unavailable go back to the tool.
-          if ((error as { kind?: string }).kind !== "conflict") throw error;
+          if ((error as { kind?: string }).kind !== "unavailable") throw error;
         }
       }
-      await setConversationState(db, employeeId, "waiting_analyst", now());
+      const handedOff = await handOffConversation(
+        db,
+        conversationId,
+        { reason: trigger, summary, ticketNumber: ticketNumber ?? null },
+        now(),
+      );
+      if (handedOff && ticketNumber) {
+        try {
+          await asEmployee.transfer(ticketNumber, `[${trigger}] ${summary}`);
+        } catch (error) {
+          // A closed ticket takes no transfer event; anything else is only logged.
+          if ((error as { kind?: string }).kind !== "conflict") {
+            console.error("Could not record the transfer on the ticket:", error);
+          }
+        }
+      }
+      return handedOff;
     },
     now,
   };

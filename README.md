@@ -30,10 +30,10 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with a sample email and **any password**:
 
-| Who                   | Email                     | Lands on                                                                                                         |
-| --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                                                                                                 |
-| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst area (console later); `GET /api/analyst/conversations/:id` reads any conversation with its decisions |
+| Who                   | Email                     | Lands on                                                                                             |
+| --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                                                                                     |
+| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst console (Screens 4 and 5); Júlia Castro (`julia.castro@nexo.com.br`) is a second analyst |
 
 The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or sign in again later: the conversation, the choices made and the state of each draft are still there.
 
@@ -43,6 +43,8 @@ The other sample people are in `packages/shared/src/directory.ts`. The line abov
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | "Meu notebook não conecta na VPN desde ontem. Aparece o erro 809." → "Windows 11" → "Só eu" → "Tenho compromisso hoje" | Screen 2: checks tickets and the help center, asks with options, shows a high-priority draft card; Confirmar creates it |
 | "Qual o status do meu chamado?" → pick INC-20311 → "Falar com um analista"                                             | Screen 3: ticket picker, the overdue INC-20311 card with three options, handoff with a summary                          |
+| "Quero falar com um analista"                                                                                          | Handed off at once, with a summary; the agent stays quiet until an analyst hands it back                                |
+| "blá", then "xyz"                                                                                                      | Low confidence twice: the agent offers an analyst with options and hands off only if it is picked                       |
 | Editar on a draft → change who is affected or the urgency → Salvar                                                     | The server recalculates priority and deadline; nothing is created until Confirmar                                       |
 | "Quero adicionar ao INC-20311: também trava no Excel"                                                                  | Draft adding information to the ticket                                                                                  |
 | "Quero reabrir o INC-20150" / "Quero reabrir o INC-19877"                                                              | Reopening draft / refusal: resolved more than 7 days ago                                                                |
@@ -53,7 +55,18 @@ The other sample people are in `packages/shared/src/directory.ts`. The line abov
 
 **Keyboard:** Ctrl+Enter (⌘+Enter on macOS) confirms the waiting draft; with the composer empty, the number keys pick the options or tickets of the waiting question; the ticket picker moves with the arrow keys; Esc closes the edit form.
 
-`pnpm db:seed` resets the tickets; "Nova conversa" starts the chat again.
+`pnpm db:seed` resets the tickets and writes sample conversations for the console (Carla, Bruno, Diego, Elisa, Fábio and Gabriela, one per state of Screen 4); Ana's conversation is left alone. "Nova conversa" starts the chat again.
+
+### Both sides at once
+
+The sign-in is a cookie, so use two browser profiles or a normal and a private window: Ana in one, Rafael in the other.
+
+1. As Ana, "Quero falar com um analista". As Rafael, the conversation is on top of "Para você", with the agent's summary and Ana's tickets.
+2. Rafael clicks "Assumir atendimento"; within 3 seconds Ana sees "Rafael Lima assumiu o atendimento" and who is answering.
+3. They exchange messages; each side sees the other's within 3 seconds.
+4. "Devolver ao agente": Ana's next message gets the agent again, which knows what Rafael said. "Encerrar atendimento": Ana's chat says it was closed and offers a new conversation.
+
+Sign in as Júlia at the same time to see that only the analyst who took a conversation over can answer it.
 
 If your machine uses another Node version globally (for example with nvm-windows), switch before installing: `nvm use 22`.
 
@@ -67,7 +80,7 @@ If your machine uses another Node version globally (for example with nvm-windows
 | `pnpm build`     | Builds the UI into `apps/web/dist`               |
 | `pnpm format`    | Formats the repository (`format:check` verifies) |
 | `pnpm db:down`   | Stops PostgreSQL (the data stays in the volume)  |
-| `pnpm db:seed`   | Resets the sample data                           |
+| `pnpm db:seed`   | Resets the sample tickets and conversations      |
 
 ## Architecture
 
@@ -110,8 +123,20 @@ The API stores every conversation in its own database (`nexo_api`), so nothing i
 - **The server holds the history.** The browser sends only the new message, and only its text; the agent always reads the history stored in the database, so a client cannot invent past messages.
 - **30 messages per conversation, on the server.** The 31st answers `409 message_limit_reached` without calling the agent, even when two arrive at once. "Nova conversa" (top bar, with a confirmation) closes the conversation and starts the count again.
 - **Replies are saved when they finish,** even if the browser closes mid-reply. A failed reply is not saved; "Tentar de novo" resends the same message, which is not saved or counted twice.
-- **The agent stays quiet** when the conversation is waiting for or with an analyst: the message is saved and the chat shows that the service desk has it. Handing a conversation over arrives in Stage 9.
-- **Privacy:** no route takes a conversation id; each one works on the session's own open conversation.
+- **The agent stays quiet** when the conversation is waiting for or with an analyst: the message is saved and the chat shows that the service desk has it. The check is in the chat route, whatever the browser sends.
+- **Privacy:** no employee route takes a conversation id; each one works on the session's own conversation. Only analysts read other conversations, through `/api/analyst`.
+
+## Handoff and the analyst console
+
+**Handoff.** The agent hands off directly only when the employee asks for a person in words or the case is critical. For an overdue ticket or when it stays unsure, it first offers "Falar com um analista" as an option and hands off only if it is picked. A handoff stores, in one transaction, the new state, the reason, the agent's summary, the related ticket and a note in the chat; the ticket also gets a transfer event when the ticket service is up.
+
+**Console (`/console`).**
+
+- **The list** has search by name or ticket number and four filters with counts: "Para você" (waiting, or with the agent at low confidence), "Com o agente", "Minhas" and "Todas". Closed conversations stay in "Todas" for 7 days. Each row says how the conversation stands: "Transferida · INC-20311 · há 12 min", "Agente pediu ajuda · confiança baixa" or "Você está atendendo".
+- **The opened conversation** shows the handoff summary on top, then every message. Nexo Assist's replies keep their cards, in read-only mode, and their decision behind "Por quê?". The employee's tickets are on the side, read as that employee, so the ticket service keeps its own privacy checks.
+- **Actions.** Any analyst takes over a waiting conversation, or one still with the agent, which then stops. Only the holder answers. The holder, or anyone while it waits, hands it back or closes it. Each action is one conditional update in the database, so two analysts clicking at once get one winner, and the other sees who took it. Every action leaves a note that both sides see.
+- **Near real time.** Both screens ask the API every 3 seconds, while the tab is visible, for what changed after the last message they have. That is one indexed query, and it needs no connection kept open.
+- **After a hand back,** the agent reads the analyst's messages and the notes, marked as such ("[Analista Rafael Lima] …"), so it does not ask again what the analyst already settled.
 
 ## How the agent decides
 

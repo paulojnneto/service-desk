@@ -281,7 +281,10 @@ describe("chat route", () => {
     const { conversation } = (await res.json()) as {
       conversation: { messages: { metadata: Record<string, unknown> }[] };
     };
-    expect(conversation.messages.at(-1)?.metadata).toEqual(metadata?.messageMetadata);
+    // The stored reply also has its order, which the live one cannot know yet (stage 9).
+    const { seq, ...stored } = conversation.messages.at(-1)!.metadata;
+    expect(stored).toEqual(metadata?.messageMetadata);
+    expect(seq).toEqual(expect.any(Number));
   });
 
   it("sends no record and saves nothing when the reply fails", async () => {
