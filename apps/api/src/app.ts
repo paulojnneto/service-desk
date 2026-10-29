@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
+import { secureHeaders } from "hono/secure-headers";
 import { session, type AppEnv } from "./auth";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { Db } from "./db/connect";
@@ -39,6 +40,7 @@ export function createApp({
 }: AppOptions) {
   const app = new Hono<AppEnv>();
 
+  app.use(securityHeaders);
   app.get("/health", (c) => c.json({ status: "ok" }));
 
   app.use("/api/*", async (c, next) => {
@@ -63,6 +65,24 @@ export function createApp({
 
   return app;
 }
+
+// The usual security headers on every response, and a content security policy that allows
+// only the app's own origin (stage 12 PRD, S-12.8). The fonts are bundled by Vite, and data:
+// covers the small assets it inlines; React's style prop goes through the DOM, which
+// style-src 'self' allows.
+export const CONTENT_SECURITY_POLICY = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'"],
+  imgSrc: ["'self'", "data:"],
+  fontSrc: ["'self'", "data:"],
+  connectSrc: ["'self'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  frameAncestors: ["'none'"],
+  formAction: ["'self'"],
+};
+const securityHeaders = secureHeaders({ contentSecurityPolicy: CONTENT_SECURITY_POLICY });
 
 // CSRF protection together with SameSite=Lax: a cross-site page cannot send a JSON
 // body without a CORS preflight, and this API never approves one.
