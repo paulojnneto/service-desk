@@ -153,3 +153,24 @@ Nothing true is removed. A long section moves to `docs/` only when the README li
 - A browser pass on `http://localhost:8080` with the simulated model: Screens 2 to 5, "Por quê?", the console, no CSP errors in the console.
 - `docker compose --profile app restart`: same conversations, same keys.
 - One GPT-5.5 turn through `.env`, only after asking. You paste the key.
+
+## Deviations
+
+- **The setup script lives in `apps/api/src/scripts/compose-setup.ts`**, not in `docker/setup.mjs`. Node resolves packages from the script's own folder, and `pg` is a dependency of `apps/api`, so a script in `docker/` could not import it.
+- **The keys come from `node:crypto`**, not from `jose`. The PEM formats are the same as `jose`'s `exportPKCS8` and `exportSPKI`, so the API and the ticket service read them as before. Running the setup on the PostgreSQL image was tried first: it has `psql` but no `openssl`.
+- **The setup image is built twice by Compose,** once for `setup` and once for `api`, from the same Dockerfile. The second build comes from the cache in seconds, so the two services stay independent.
+- **The smoke test starts a new conversation for Ana** before its message, as "Nova conversa" does, so repeated runs never reach the 30-message limit. The old conversation stays stored.
+- **ESLint does not cover the root `scripts/` folder,** for `smoke.mjs` as for the earlier `dev-setup.mjs`: `pnpm lint` runs per package, and the root has no Node globals configured. Left as it was; a small fix for later.
+
+## Verification
+
+Done on 2026-10-29, on Windows 11 with Docker Compose v5.5.1, beside the running `pnpm dev`:
+
+- `docker compose --profile app up --build`: the setup created `nexo_app_api`, `nexo_app_tickets`, the key pair and the session secret. The ticket service seeded 9 tickets and 8 articles, the API 6 conversations, and its log said `Agent model: mock (simulated, no key needed)`. The ticket service shows only `4000/tcp` inside the network; the API is on `127.0.0.1:8080`.
+- `/health` and the pages carry the content security policy and the other headers.
+- Browser, on http://localhost:8080: Ana signed in, sent "Minha VPN dá erro 809 no Windows 11", and got the tools line, "Por quê?" and the options; the session survived a reload; no content security policy violation in the console. Rafael opened the console, took over Carla's conversation and replied, and the ticket panel showed REQ-10439.
+- Containers recreated: the setup created nothing, both seeds said "Sample data already there", and Ana's earlier cookie still worked, so the secret was kept.
+- `pnpm smoke`: all six checks passed.
+- The development databases `nexo_api` and `nexo_tickets` and ports 3000, 3001 and 4000 were not touched.
+- `pnpm format:check`, `lint`, `typecheck`, `test` (44 files, 344 tests), `eval` (13 of 13 with the simulated model) and `build` pass.
+- One GPT-5.5 turn through the stack, with the key pasted by the user in the root `.env`: the API's log said `Agent model: openai/gpt-5.5`, and `pnpm smoke` passed ("Meu Outlook não abre" → `abrir_chamado`, `consultou_chamados`). The stored usage: 4 model calls, 14,562 input tokens (12,288 cached), 526 output tokens, 13.5 s, US$ 0.033.
