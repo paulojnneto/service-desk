@@ -15,7 +15,13 @@ describe("agent usage", () => {
     expect(listener).toHaveBeenCalledWith(usage);
   });
 
-  it("counts missing numbers as zero", () => {
+  it("reads the cached tokens where Mastra reports them", () => {
+    expect(
+      usageOf({ inputTokens: 13_000, cachedInputTokens: 9_000, outputTokens: 300 }, 3),
+    ).toEqual({ inputTokens: 13_000, cachedInputTokens: 9_000, outputTokens: 300, steps: 3 });
+  });
+
+  it("counts missing numbers as zero, and falls back to the AI SDK's cached field", () => {
     expect(usageOf({ inputTokens: 10, inputTokenDetails: { cacheReadTokens: 4 } }, 2)).toEqual({
       inputTokens: 10,
       cachedInputTokens: 4,
