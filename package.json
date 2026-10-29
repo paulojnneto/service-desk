@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "eval": "pnpm --filter @nexo/api eval",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @nexo/tickets --filter @nexo/api db:migrate",
