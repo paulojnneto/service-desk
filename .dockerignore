@@ -1,0 +1,12 @@
+# Keeps the build context small and free of secrets (stage 12 tech spec): no dependencies or
+# builds from this machine, no env files except the examples, no keys.
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.claude
+**/.env*
+!**/.env.example
+*.pem
+docs
