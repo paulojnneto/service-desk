@@ -3,10 +3,25 @@ import {
   type ConversationState,
   type DecisionRecord,
   findPersonById,
+  type Confidence,
   type HandoffReason,
   type MessageAuthor,
 } from "@nexo/shared";
-import { and, asc, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { Db } from "../db/connect";
 import { conversations, decisions, handoffs, messages } from "../db/schema";
 
@@ -376,4 +391,114 @@ export async function appendAnalystMessage(
       .returning();
     return { status: "saved", message: row! };
   });
+}
+
+// --- Console reads (stage 9 PRD, S-09.3, S-09.4 and S-09.12) ---------------------------------
+
+// Closed conversations stay in "Todas" for a few days (decision 8).
+const CLOSED_VISIBLE_DAYS = 7;
+
+export async function listConsoleConversations(db: Db, now: Date): Promise<ConversationRow[]> {
+  const since = new Date(now.getTime() - CLOSED_VISIBLE_DAYS * 24 * 60 * 60 * 1000);
+  return db
+    .select()
+    .from(conversations)
+    .where(or(isOpen, gte(conversations.closedAt, since)))
+    .orderBy(desc(conversations.updatedAt));
+}
+
+export async function lastMessages(db: Db, ids: string[]): Promise<Map<string, MessageRow>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .selectDistinctOn([messages.conversationId])
+    .from(messages)
+    .where(inArray(messages.conversationId, ids))
+    .orderBy(messages.conversationId, desc(messages.seq));
+  return new Map(rows.map((row) => [row.conversationId, row]));
+}
+
+// The confidence of each conversation's latest agent decision (A2).
+export async function lastAgentConfidences(
+  db: Db,
+  ids: string[],
+): Promise<Map<string, Confidence>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .selectDistinctOn([decisions.conversationId], {
+      conversationId: decisions.conversationId,
+      confidence: decisions.confidence,
+    })
+    .from(decisions)
+    .where(and(inArray(decisions.conversationId, ids), eq(decisions.source, "agent")))
+    .orderBy(decisions.conversationId, desc(decisions.createdAt));
+  return new Map(rows.map((row) => [row.conversationId, row.confidence as Confidence]));
+}
+
+export async function latestHandoffs(db: Db, ids: string[]): Promise<Map<string, HandoffRow>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .selectDistinctOn([handoffs.conversationId])
+    .from(handoffs)
+    .where(inArray(handoffs.conversationId, ids))
+    .orderBy(handoffs.conversationId, desc(handoffs.createdAt));
+  return new Map(rows.map((row) => [row.conversationId, row]));
+}
+
+// Conversations that mention a ticket number, in a handoff or in any message. The caller
+// passes only a ticket number ("INC-20311"), so it has no LIKE wildcards to escape.
+export async function conversationsMentioning(
+  db: Db,
+  ids: string[],
+  ticketNumber: string,
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const pattern = `%${ticketNumber}%`;
+  const [inMessages, inHandoffs] = await Promise.all([
+    db
+      .selectDistinct({ id: messages.conversationId })
+      .from(messages)
+      .where(
+        and(inArray(messages.conversationId, ids), ilike(sql`${messages.parts}::text`, pattern)),
+      ),
+    db
+      .selectDistinct({ id: handoffs.conversationId })
+      .from(handoffs)
+      .where(and(inArray(handoffs.conversationId, ids), ilike(handoffs.ticketNumber, pattern))),
+  ]);
+  return new Set([...inMessages, ...inHandoffs].map((row) => row.id));
+}
+
+// What was stored after a message, in order; optionally only from some authors.
+export async function messagesAfter(
+  db: Db,
+  conversationId: string,
+  after: number,
+  authors?: MessageAuthor[],
+): Promise<MessageRow[]> {
+  return db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        gt(messages.seq, after),
+        authors ? inArray(messages.author, authors) : undefined,
+      ),
+    )
+    .orderBy(asc(messages.seq));
+}
+
+// The employee's latest conversation, open or just closed by an analyst, so the chat on screen
+// learns that it was closed (stage 9 tech spec).
+export async function findLatestConversation(
+  db: Db,
+  employeeId: string,
+): Promise<ConversationRow | null> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.employeeId, employeeId))
+    .orderBy(desc(conversations.startedAt))
+    .limit(1);
+  return row ?? null;
 }

@@ -1,20 +1,30 @@
 import {
   AnalystMessageInput,
+  ConsoleFilter,
   consoleEmployee,
   holderFor,
   type AnalystConversationView,
+  type ConsoleTickets,
+  type ConversationSummary,
 } from "@nexo/shared";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { requireRole, type AppEnv } from "../auth";
+import { consoleList, summarize } from "../conversations/console";
 import {
   appendAnalystMessage,
   closeByAnalyst,
+  conversationsMentioning,
   findConversationById,
   handBack,
+  lastAgentConfidences,
+  lastMessages,
+  latestHandoffs,
+  listConsoleConversations,
   listDecisions,
   listHandoffs,
   listMessages,
+  messagesAfter,
   takeOver,
   type ConsoleActionResult,
   type ConversationRow,
@@ -24,6 +34,9 @@ import type { Db } from "../db/connect";
 import { findWaitingDraft, listDrafts } from "../drafts/repository";
 
 const ConversationId = z.uuid();
+// The cursor of the updates: the highest message seq the screen already has.
+export const After = z.coerce.number().int().min(0).catch(0);
+const TICKET_NUMBER = /^(INC|REQ)-\d+$/i;
 
 // The analyst console's API (stage 9 tech spec). Every route needs the analyst role; any
 // analyst reads any conversation (stage 8 PRD, S-08.12), and the actions follow decision 3:
@@ -31,8 +44,78 @@ const ConversationId = z.uuid();
 // hands back or closes.
 export const analystRoutes = new Hono<AppEnv>()
   .use(requireRole("analyst"))
+  // The list (S-09.3, S-09.4): every filter's count, the chosen filter's rows.
+  .get("/conversations", async (c) => {
+    const filter = ConsoleFilter.catch("para_voce").parse(c.req.query("filter"));
+    const query = (c.req.query("q") ?? "").trim().slice(0, 100);
+    const db = c.get("db");
+    try {
+      const rows = await listConsoleConversations(db, c.get("now")());
+      const ids = rows.map((row) => row.id);
+      const [last, confidences, handoffs, ticketHits] = await Promise.all([
+        lastMessages(db, ids),
+        lastAgentConfidences(db, ids),
+        latestHandoffs(db, ids),
+        TICKET_NUMBER.test(query)
+          ? conversationsMentioning(db, ids, query.toUpperCase())
+          : Promise.resolve(new Set<string>()),
+      ]);
+      const summaries = rows.flatMap((row) => {
+        const handoff = handoffs.get(row.id);
+        const summary = summarize({
+          conversation: row,
+          lastMessage: last.get(row.id) ?? null,
+          lastConfidence: confidences.get(row.id) ?? null,
+          handoff: handoff ? toHandoffView(handoff) : null,
+        });
+        return summary ? [summary] : ([] as ConversationSummary[]);
+      });
+      return c.json(
+        consoleList(summaries, { filter, query, analystId: c.get("person")!.id, ticketHits }),
+      );
+    } catch (error) {
+      console.error("Could not list the conversations:", error);
+      return c.json({ error: "unavailable" }, 503);
+    }
+  })
   .get("/conversations/:id", (c) =>
     withConversation(c, async (db, row) => c.json({ conversation: await analystView(db, row) })),
+  )
+  // What changed since the screen's last message (decision 1): every author, the state, the
+  // holder and the handoffs.
+  .get("/conversations/:id/updates", (c) =>
+    withConversation(c, async (db, row) => {
+      const [rows, handoffs] = await Promise.all([
+        messagesAfter(db, row.id, After.parse(c.req.query("after"))),
+        listHandoffs(db, row.id),
+      ]);
+      return c.json({
+        state: row.state,
+        holder: holderFor(row.holderId),
+        messages: rows.map((message) => toStoredMessage(message)),
+        handoffs: handoffs.map(toHandoffView),
+      });
+    }),
+  )
+  // The employee's tickets (S-09.6), read as that employee: the ticket service keeps its R7
+  // checks, and only the conversation's employee can be read (decision 7).
+  .get("/conversations/:id/tickets", (c) =>
+    withConversation(c, async (db, row) => {
+      const related = (await listHandoffs(db, row.id)).findLast(
+        (h) => h.ticketNumber,
+      )?.ticketNumber;
+      try {
+        const tickets = await c.get("tickets").as(row.employeeId).list("all");
+        const answer: ConsoleTickets = {
+          related: tickets.find((t) => t.number === related) ?? null,
+          others: tickets.filter((t) => t.number !== related),
+        };
+        return c.json(answer);
+      } catch (error) {
+        console.error("Could not read the employee's tickets:", error);
+        return c.json({ error: "unavailable" }, 503);
+      }
+    }),
   )
   .post("/conversations/:id/take-over", (c) =>
     withConversation(c, async (db, row, me) => {
