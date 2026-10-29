@@ -11,7 +11,13 @@ export const registrarDecisao = createTool({
   inputSchema: z.object({
     intencao: Intent,
     confianca: Confidence,
-    justificativa: z.string().min(5).max(400).describe("Uma ou duas frases, em português"),
+    justificativa: z
+      .string()
+      .min(5)
+      .max(400)
+      .describe(
+        "Uma ou duas frases neutras, em português, para o funcionário e o analista: o que foi pedido e por que você seguiu esse caminho. A pessoa na terceira pessoa; sem nomes de ferramentas, códigos ou dados de outra pessoa",
+      ),
     regras: z.array(RuleId).max(9).describe("Regras do Anexo A aplicadas"),
   }),
   execute: async () => ({ registrado: true }),
