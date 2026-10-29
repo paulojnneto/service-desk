@@ -280,6 +280,29 @@ describe("PATCH /api/drafts/:id", () => {
     expect(body.draft?.duplicates.map((d) => d.number)).toContain("INC-20311");
   });
 
+  it("keeps the draft as it was when the ticket service is down during an edit (stage 11)", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    const draft = await draftFor("ana.souza");
+    const service = await testTickets();
+
+    // A new category lists the duplicates again, which needs the ticket service.
+    service.down.value = true;
+    try {
+      const { status } = await patch(cookie, draft.id, {
+        kind: "create",
+        fields: { ...editable, category: "Hardware" },
+      });
+      expect(status).toBe(503);
+    } finally {
+      service.down.value = false;
+    }
+    const [row] = await queryRows<{ status: string; category: string }>(
+      db,
+      sql`select status, fields->>'category' as category from drafts where id = ${draft.id}`,
+    );
+    expect(row).toEqual({ status: "pending", category: "Rede e VPN" });
+  });
+
   it("does not count the edit note toward the message limit", async () => {
     const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
     const draft = await draftFor("ana.souza");
