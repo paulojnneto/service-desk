@@ -129,6 +129,7 @@ export function ConsolePage() {
   const { tickets, ticketsFailed, reloadTickets } = useTickets(
     conversationId,
     conversation?.handoffs.at(-1)?.ticketNumber ?? null,
+    conversation?.holder?.id ?? null,
   );
 
   const firstName = conversation?.employee.name.split(" ")[0] ?? "";
@@ -275,10 +276,11 @@ function refusalText(error: string, holder?: string): string {
   return "Não consegui fazer isso agora. Tente de novo em instantes.";
 }
 
-// The employee's tickets, read again when the conversation or its related ticket changes.
-function useTickets(id: string | null, related: string | null) {
+// The employee's tickets, read again when the conversation, its related ticket or its holder
+// changes: taking over moves the related ticket to "em andamento".
+function useTickets(id: string | null, related: string | null, holder: string | null) {
   const [attempt, setAttempt] = useState(0);
-  const key = `${id}|${related}|${attempt}`;
+  const key = `${id}|${related}|${holder}|${attempt}`;
   const [loaded, setLoaded] = useState<{ key: string; tickets: ConsoleTickets | null } | null>(
     null,
   );
@@ -286,7 +288,7 @@ function useTickets(id: string | null, related: string | null) {
   useEffect(() => {
     if (!id) return;
     let current = true;
-    const answered = `${id}|${related}|${attempt}`;
+    const answered = `${id}|${related}|${holder}|${attempt}`;
     fetchConsoleTickets(id).then(
       (tickets) => current && setLoaded({ key: answered, tickets }),
       () => current && setLoaded({ key: answered, tickets: null }),
@@ -294,7 +296,7 @@ function useTickets(id: string | null, related: string | null) {
     return () => {
       current = false;
     };
-  }, [id, related, attempt]);
+  }, [id, related, holder, attempt]);
 
   const found = loaded?.key === key ? loaded : null;
   return {
