@@ -22,7 +22,7 @@ try {
   process.exit(1);
 }
 
-serve({ fetch: createApp({ db, tickets }).fetch, port }, (info) => {
+serve({ fetch: createApp({ db, tickets, webDist: process.env.WEB_DIST }).fetch, port }, (info) => {
   console.log(`Agent API listening on http://localhost:${info.port}`);
   // Which model answers, so a run with Docker Compose shows whether the key was picked up.
   const model = modelName();

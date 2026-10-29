@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createTestApp } from "./test-app";
 
@@ -36,5 +39,47 @@ describe("agent API", () => {
 
     expect(res.status).toBe(415);
     expect(await res.json()).toEqual({ error: "unsupported_media_type" });
+  });
+});
+
+describe("the built screens (WEB_DIST)", () => {
+  let app: Awaited<ReturnType<typeof createTestApp>>["app"];
+  beforeEach(async () => {
+    const webDist = mkdtempSync(join(tmpdir(), "nexo-web-"));
+    mkdirSync(join(webDist, "assets"));
+    writeFileSync(join(webDist, "index.html"), "<!doctype html><title>Nexo Assist</title>");
+    writeFileSync(join(webDist, "assets", "app.js"), "console.log('nexo')");
+    ({ app } = await createTestApp({ webDist }));
+  });
+
+  it("serves index.html for the root and for every screen of the router", async () => {
+    for (const path of ["/", "/console", "/console/abc"]) {
+      const res = await app.request(path);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+      expect(await res.text()).toContain("<title>Nexo Assist</title>");
+    }
+  });
+
+  it("serves the built files", async () => {
+    const res = await app.request("/assets/app.js");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("javascript");
+    expect(await res.text()).toBe("console.log('nexo')");
+  });
+
+  it("keeps an unknown API path a JSON 404", async () => {
+    const res = await app.request("/api/nope");
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not_found" });
+  });
+
+  it("keeps the API working", async () => {
+    const res = await app.request("/api/auth/me");
+
+    expect(res.status).toBe(401);
   });
 });
