@@ -5,6 +5,7 @@ import {
   findPersonById,
   type Confidence,
   type HandoffReason,
+  type LastClosed,
   type MessageAuthor,
 } from "@nexo/shared";
 import {
@@ -209,7 +210,14 @@ export async function lastMessage(db: Db, conversationId: string): Promise<Messa
 export async function closeOpenConversation(db: Db, employeeId: string, now: Date) {
   await db
     .update(conversations)
-    .set({ state: "closed", holderId: null, heldSince: null, closedAt: now, updatedAt: now })
+    .set({
+      state: "closed",
+      holderId: null,
+      heldSince: null,
+      closedAt: now,
+      closedBy: employeeId,
+      updatedAt: now,
+    })
     .where(and(eq(conversations.employeeId, employeeId), isOpen));
 }
 
@@ -349,7 +357,7 @@ export function closeByAnalyst(db: Db, conversationId: string, analystId: string
     db,
     conversationId,
     heldByOrWaiting(analystId),
-    { state: "closed", holderId: null, heldSince: null, closedAt: now },
+    { state: "closed", holderId: null, heldSince: null, closedAt: now, closedBy: analystId },
     "Atendimento encerrado.",
     now,
   );
@@ -533,4 +541,16 @@ export async function findLatestConversation(
     .orderBy(desc(conversations.startedAt))
     .limit(1);
   return row ?? null;
+}
+
+// Who closed the employee's latest conversation and when, if it was an analyst: closing it
+// with "Nova conversa" needs no reminder.
+export async function lastClosedByAnalyst(db: Db, employeeId: string): Promise<LastClosed | null> {
+  const latest = await findLatestConversation(db, employeeId);
+  if (latest?.state !== "closed" || !latest.closedBy || !latest.closedAt) return null;
+  if (latest.closedBy === employeeId) return null;
+  return {
+    by: findPersonById(latest.closedBy)?.name ?? "Um analista",
+    at: latest.closedAt.toISOString(),
+  };
 }

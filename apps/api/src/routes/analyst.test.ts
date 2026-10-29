@@ -310,6 +310,19 @@ describe("updates", () => {
       ["system", "Atendimento encerrado."],
     ]);
   });
+
+  it("tells the employee's next chat who closed the last conversation", async () => {
+    const { cookie, id, rafael } = await waitingConversation();
+    await post(path(id, "/take-over"), rafael);
+    await post(path(id, "/close"), rafael);
+
+    const { body } = await get("/api/conversations/current", cookie);
+
+    expect(body).toMatchObject({
+      conversation: null,
+      lastClosed: { by: "Rafael Lima", at: expect.any(String) },
+    });
+  });
 });
 
 describe("POST take-over, the related ticket", () => {

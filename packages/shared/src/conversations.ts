@@ -57,6 +57,9 @@ export type ConversationView = {
   messages: StoredMessage[];
 };
 
+// The employee's last conversation, when an analyst closed it: the next chat says so.
+export type LastClosed = { by: string; at: string };
+
 // What changed since the last poll (stage 9 PRD, decision 1). For the employee, only the
 // analysts' and the system's messages; the console gets every message.
 export type ConversationUpdates = {
