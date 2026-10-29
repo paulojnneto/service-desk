@@ -5,6 +5,7 @@ import type {
   ConsoleTickets,
   ConversationUpdates,
   HandoffView,
+  Holder,
   ConversationView,
   DraftView,
   EditDraftInput,
@@ -157,6 +158,66 @@ export async function fetchAnalystUpdates(id: string, after: number): Promise<An
 
 export async function fetchConsoleTickets(id: string): Promise<ConsoleTickets> {
   return readJson(await request(`/api/analyst/conversations/${encodeURIComponent(id)}/tickets`));
+}
+
+export type ConsoleAction = "take-over" | "hand-back" | "close";
+
+export type ConsoleActionResult =
+  | { ok: true; conversation: AnalystConversationView }
+  | { ok: false; error: string; holder?: Holder | null };
+
+// Take over, hand back or close (stage 9 PRD, S-09.7 and S-09.9). A refusal says why, and who
+// holds the conversation when that is the reason.
+export async function runConsoleAction(
+  id: string,
+  action: ConsoleAction,
+): Promise<ConsoleActionResult> {
+  return consoleAnswer(
+    await sendJson(`/api/analyst/conversations/${encodeURIComponent(id)}/${action}`, {}),
+  );
+}
+
+export type AnalystReplyResult =
+  { ok: true; message: StoredMessage } | { ok: false; error: string; holder?: Holder | null };
+
+export async function sendAnalystMessage(
+  id: string,
+  reply: { clientId: string; text: string },
+): Promise<AnalystReplyResult> {
+  const res = await sendJson(
+    `/api/analyst/conversations/${encodeURIComponent(id)}/messages`,
+    reply,
+  );
+  if (!res) return { ok: false, error: "unavailable" };
+  if (res.status === 401) throw new SignedOutError();
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: StoredMessage;
+    error?: string;
+    holder?: Holder | null;
+  };
+  if (res.ok && body.message) return { ok: true, message: body.message };
+  return { ok: false, error: body.error ?? "unavailable", holder: body.holder };
+}
+
+async function consoleAnswer(res: Response | null): Promise<ConsoleActionResult> {
+  if (!res) return { ok: false, error: "unavailable" };
+  if (res.status === 401) throw new SignedOutError();
+  const body = (await res.json().catch(() => ({}))) as {
+    conversation?: AnalystConversationView;
+    error?: string;
+    holder?: Holder | null;
+  };
+  if (res.ok && body.conversation) return { ok: true, conversation: body.conversation };
+  return { ok: false, error: body.error ?? "unavailable", holder: body.holder };
+}
+
+// A POST that answers null instead of throwing when the API cannot be reached.
+async function sendJson(path: string, body: unknown): Promise<Response | null> {
+  try {
+    return await postJson(path, body);
+  } catch {
+    return null;
+  }
 }
 
 export async function signOut(): Promise<void> {

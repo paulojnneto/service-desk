@@ -4,10 +4,12 @@ import type {
   ConsoleList,
   ConsoleTickets,
   SessionUser,
+  StoredMessage,
 } from "@nexo/shared";
 import { LogOut, MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Form, NavLink, useLoaderData, useParams } from "react-router";
+import { ConversationActions } from "../../components/console/conversation-actions";
 import { ConversationHistory } from "../../components/console/conversation-history";
 import { ConversationList } from "../../components/console/conversation-list";
 import { TicketsPanel } from "../../components/console/tickets-panel";
@@ -17,6 +19,9 @@ import {
   fetchAnalystUpdates,
   fetchConsoleList,
   fetchConsoleTickets,
+  runConsoleAction,
+  sendAnalystMessage,
+  type ConsoleAction,
 } from "../../lib/api";
 import { highestSeq, mergeUpdates } from "../../lib/updates";
 import { useConversationUpdates } from "../../lib/use-conversation-updates";
@@ -63,7 +68,64 @@ export function ConsolePage() {
   }, [filter, search]);
   useConversationUpdates(loadList, true);
 
-  const { conversation, missing } = useConversation(conversationId);
+  const { conversation, missing, updateView } = useConversation(conversationId);
+  const [busy, setBusy] = useState<ConsoleAction | "reply" | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
+
+  // Take over, hand back or close (S-09.7, S-09.9). The answer is the conversation as it is
+  // now; a refusal says why and who holds it.
+  async function act(action: ConsoleAction) {
+    if (!conversation) return;
+    setBusy(action);
+    setActionError(null);
+    const result = await runConsoleAction(conversation.id, action);
+    setBusy(null);
+    if (result.ok) {
+      updateView(() => result.conversation);
+      void loadList();
+      return;
+    }
+    setActionError({
+      id: conversation.id,
+      message: refusalText(result.error, result.holder?.name),
+    });
+    const fresh = await fetchAnalystConversation(conversation.id).catch(() => null);
+    if (fresh) updateView(() => fresh);
+  }
+
+  // The reply shows at once; the stored one replaces it, or it goes away on a refusal (S-09.8).
+  async function reply(text: string): Promise<boolean> {
+    if (!conversation) return false;
+    const clientId = crypto.randomUUID();
+    const local: StoredMessage = {
+      id: clientId,
+      role: "assistant",
+      parts: [{ type: "text", text }],
+      metadata: {
+        author: "analyst",
+        authorName: user.name,
+        ...(conversation.holder ? { authorLevel: conversation.holder.level } : {}),
+        createdAt: new Date().toISOString(),
+      },
+    };
+    const without = (view: AnalystConversationView) =>
+      view.messages.filter((m) => m.id !== clientId);
+    updateView((view) => ({ ...view, messages: [...view.messages, local] }));
+    setBusy("reply");
+    setActionError(null);
+    const result = await sendAnalystMessage(conversation.id, { clientId, text });
+    setBusy(null);
+    if (result.ok) {
+      updateView((view) => ({ ...view, messages: mergeUpdates(without(view), [result.message]) }));
+      return true;
+    }
+    updateView((view) => ({ ...view, messages: without(view) }));
+    setActionError({
+      id: conversation.id,
+      message: refusalText(result.error, result.holder?.name),
+    });
+    return false;
+  }
   const { tickets, ticketsFailed, reloadTickets } = useTickets(
     conversationId,
     conversation?.handoffs.at(-1)?.ticketNumber ?? null,
@@ -112,6 +174,17 @@ export function ConsolePage() {
             conversation={conversation}
             analystId={user.id}
             onShowTickets={() => setTicketsOpen(true)}
+            footer={
+              <ConversationActions
+                conversation={conversation}
+                analystId={user.id}
+                now={now}
+                busy={busy}
+                error={actionError?.id === conversation.id ? actionError.message : null}
+                onAction={(action) => void act(action)}
+                onReply={reply}
+              />
+            }
           />
         )}
       </main>
@@ -184,7 +257,22 @@ function useConversation(id: string | null) {
     );
   }, Boolean(conversation));
 
-  return { conversation, missing: found !== null && found.view === null };
+  // Replaces the opened conversation in place, after an action or a reply.
+  const updateView = useCallback(
+    (change: (view: AnalystConversationView) => AnalystConversationView) =>
+      setLoaded((prev) => (prev?.view ? { id: prev.id, view: change(prev.view) } : prev)),
+    [],
+  );
+
+  return { conversation, missing: found !== null && found.view === null, updateView };
+}
+
+function refusalText(error: string, holder?: string): string {
+  if (error === "already_held") return `${holder ?? "Outro analista"} já assumiu esta conversa.`;
+  if (error === "not_holder") return "Você não está mais com esta conversa.";
+  if (error === "closed") return "Esta conversa já foi encerrada.";
+  if (error === "invalid_input") return "Escreva uma resposta antes de enviar.";
+  return "Não consegui fazer isso agora. Tente de novo em instantes.";
 }
 
 // The employee's tickets, read again when the conversation or its related ticket changes.
