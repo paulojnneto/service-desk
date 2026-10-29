@@ -16,6 +16,10 @@ type Turn = {
   earlierUser: string[]; // previous employee messages, normalized, oldest first
   lastAgentText: string; // the agent's last text before this message
   lastQuestion: string; // what the agent asked with perguntar in its last reply, normalized
+  // The last analyst's message ("[Analista Rafael Lima] …"), and whether the conversation was
+  // handed back to the agent since its last reply (stage 9).
+  lastAnalyst: { name: string; text: string } | null;
+  handedBack: boolean;
   results: Map<string, Record<string, unknown>>; // tool results in this turn
   system: string;
 };
@@ -41,6 +45,7 @@ function pickFlow(turn: Turn): Flow {
   // The options offered after an overdue ticket (Screen 3).
   if (/analista/.test(turn.lastQuestion) && /adicionar informacao/.test(user)) return askWhatToAdd;
   if (/analista/.test(turn.lastQuestion) && /^nao/.test(user)) return declined;
+  if (/analista/.test(turn.lastQuestion) && /explicar/.test(user)) return explainAgain;
   if (/analista|atendente|humano|falar com (uma )?pessoa/.test(user)) return handoff;
   if (outOfScopeArea(user)) return outOfScope;
   if (/reabr/.test(user) && number) return reopen;
@@ -57,6 +62,7 @@ function pickFlow(turn: Turn): Flow {
   }
   if (/abrir (um )?chamado|nao funciona|parou|lento|travando|nao liga/.test(user))
     return newProblem;
+  if (turn.handedBack && turn.lastAnalyst) return resumeAfterAnalyst;
   return unclear;
 }
 
@@ -378,10 +384,18 @@ const handoff: Flow = (turn) => {
   const result = turn.results.get("transferirParaAnalista");
   if (!result) {
     const number = lastTicketNumber(turn);
+    // Picking "Falar com um analista" answers an offer: after an overdue ticket, or after
+    // not understanding twice (stage 9, S-09.2). Otherwise the employee asked in words.
+    const offered = /analista/.test(turn.lastQuestion);
     const overdue = /vencid|prazo/.test(normalize(turn.lastAgentText));
+    const gatilho = !offered
+      ? "pedido_do_funcionario"
+      : overdue
+        ? "chamado_vencido"
+        : "baixa_confianca";
     return tools(
       call("transferirParaAnalista", {
-        gatilho: overdue ? "chamado_vencido" : "pedido_do_funcionario",
+        gatilho,
         resumo:
           `O funcionário pediu um analista. ${number ? `Chamado relacionado: ${number}. ` : ""}Últimas mensagens: ${[...turn.earlierUser.slice(-2), turn.raw].join(" / ")}`.slice(
             0,
@@ -451,14 +465,47 @@ const injection: Flow = (turn) => {
 };
 
 const unclear: Flow = (turn) => {
+  const again = /confianca foi baixa/.test(normalize(turn.system));
   if (!turn.results.has("registrarDecisao")) {
-    return tools(decision("outro", "baixa", "Não ficou claro o que a pessoa precisa.", []));
+    const decided = decision("outro", "baixa", "Não ficou claro o que a pessoa precisa.", []);
+    // Still unclear: offer an analyst, and hand off only if it is picked (stage 9, S-09.2).
+    if (!again) return tools(decided);
+    return tools(
+      call("perguntar", {
+        pergunta: "Quer que eu chame um analista?",
+        opcoes: ["Falar com um analista", "Vou explicar de novo"],
+      }),
+      decided,
+    );
   }
-  if (/confianca foi baixa/.test(normalize(turn.system))) {
-    return text("Ainda não consegui entender. Quer que eu chame um analista para te ajudar?");
-  }
+  if (again) return text("Ainda não consegui entender.");
   return text(
     "Estou em modo simulado, sem LLM, e não entendi esse pedido. Posso ajudar com o horário do service desk, seus chamados, abrir um chamado ou chamar um analista.",
+  );
+};
+
+const explainAgain: Flow = (turn) => {
+  if (!turn.results.has("registrarDecisao")) {
+    return tools(decision("outro", "media", "A pessoa preferiu explicar de novo.", []));
+  }
+  return text("Claro. Me conte com outras palavras o que está acontecendo.");
+};
+
+// Back from the analyst (stage 9, S-09.11): the agent picks up from what the person said.
+const resumeAfterAnalyst: Flow = (turn) => {
+  if (!turn.results.has("registrarDecisao")) {
+    return tools(
+      decision(
+        "outro",
+        "alta",
+        "A conversa voltou do analista; retomei a partir do que ele disse.",
+        [],
+      ),
+    );
+  }
+  const { name, text: said } = turn.lastAnalyst!;
+  return text(
+    `Estou de volta. Vi que ${name} falou com você por aqui: "${said}". Posso ajudar com mais alguma coisa?`,
   );
 };
 
@@ -624,6 +671,8 @@ function readTurn(prompt: LanguageModelV4Prompt): Turn {
   const earlierUser: string[] = [];
   let lastAgentText = "";
   let lastQuestion = "";
+  let lastAnalyst: Turn["lastAnalyst"] = null;
+  let handedBack = false;
   prompt.forEach((m, i) => {
     if (i >= lastUser) return;
     if (m.role === "user") {
@@ -631,12 +680,27 @@ function readTurn(prompt: LanguageModelV4Prompt): Turn {
       lastQuestion = "";
     }
     if (m.role !== "assistant") return;
-    if (textOf(i).trim()) lastAgentText = textOf(i);
+    // Consecutive assistant messages reach the model as one, so each text part is read on its
+    // own: an analyst's message or a system note, as the API writes them, or the agent's text.
+    const agentText: string[] = [];
     for (const part of m.content) {
+      if (part.type === "text") {
+        const value = part.text.trim();
+        const analyst = /^\[Analista ([^\]]+)\]\s*([\s\S]*)$/.exec(value);
+        if (analyst) {
+          lastAnalyst = { name: analyst[1]!, text: analyst[2]!.trim() };
+        } else if (value.startsWith("[Nota do sistema]")) {
+          if (/devolvida/.test(normalize(value))) handedBack = true;
+        } else if (value) {
+          agentText.push(part.text);
+          handedBack = false;
+        }
+      }
       if (part.type === "tool-call" && part.toolName === "perguntar") {
         lastQuestion = normalize(String(inputOf(part.input).pergunta ?? ""));
       }
     }
+    if (agentText.length > 0) lastAgentText = agentText.join(" ");
   });
 
   const results = new Map<string, Record<string, unknown>>();
@@ -655,6 +719,8 @@ function readTurn(prompt: LanguageModelV4Prompt): Turn {
     earlierUser,
     lastAgentText,
     lastQuestion,
+    lastAnalyst,
+    handedBack,
     results,
     system: system?.role === "system" ? system.content : "",
   };

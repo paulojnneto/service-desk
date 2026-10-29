@@ -8,7 +8,7 @@ import { failureOf, servicesFrom } from "./shared";
 export const transferirParaAnalista = createTool({
   id: "transferir-para-analista",
   description:
-    "Transfere a conversa para um analista do service desk. Use quando o funcionário pedir, em casos críticos, quando um chamado estiver vencido e o funcionário quiser, ou quando você continuar sem entender o que ele precisa. Escreva um resumo que o analista entenda sem ler a conversa toda. Depois disso você não responde mais nesta conversa.",
+    'Transfere a conversa para um analista do service desk. Chame direto só quando o funcionário pedir uma pessoa com palavras ou num caso crítico. Para um chamado vencido ou quando você continuar sem entender, ofereça antes com perguntar e chame só depois que ele escolher "Falar com um analista". Escreva um resumo que o analista entenda sem ler a conversa toda. Depois disso você não responde mais nesta conversa.',
   inputSchema: z.object({
     gatilho: z.enum(HANDOFF_TRIGGERS),
     resumo: z.string().min(10).max(1000),

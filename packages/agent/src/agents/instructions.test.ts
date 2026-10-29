@@ -47,6 +47,17 @@ describe("instructionsFor", () => {
     expect(text).toContain("Não cite nomes de ferramentas, códigos de regra ou de intenção");
   });
 
+  it("offers an analyst before handing off, and explains who wrote the prefixed messages", () => {
+    const text = instructionsFor(
+      requestContextFor({ userId: "ana.souza", firstName: "Ana", services }),
+    );
+
+    expect(text).toContain("Transfira direto, sem perguntar, só quando o funcionário pedir");
+    expect(text).toContain("ofereça antes com perguntar");
+    expect(text).toContain("Uma oferta sem resposta não é um sim.");
+    expect(text).toContain('Mensagens que começam com "[Analista Nome]"');
+  });
+
   it("says nothing about drafts when none is waiting", () => {
     const text = instructionsFor(
       requestContextFor({ userId: "ana.souza", firstName: "Ana", services }),

@@ -78,10 +78,27 @@ export function toConversationView(
   };
 }
 
-// What the agent reads: only the employee's and its own messages, in order. How it reads
-// analyst and system messages is decided with the handoff (Stage 9).
+// What the agent reads, in order: the employee's and its own messages as they are, and the
+// analysts' and the system's as assistant text with a prefix, so it knows what a person did
+// but cannot take those words for its own (stage 9 PRD, S-09.11 and decision 6).
 export function toAgentHistory(rows: MessageRow[]): StoredMessage[] {
-  return rows
-    .filter((row) => row.author === "employee" || row.author === "agent")
-    .map((row) => toStoredMessage(row));
+  return rows.map((row) => {
+    const message = toStoredMessage(row);
+    if (row.author === "employee" || row.author === "agent") return message;
+    const prefix =
+      row.author === "analyst"
+        ? `[Analista ${message.metadata.authorName ?? "do service desk"}]`
+        : "[Nota do sistema]";
+    return { ...message, parts: [{ type: "text", text: `${prefix} ${textOf(row.parts)}` }] };
+  });
+}
+
+function textOf(parts: unknown): string {
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((part) =>
+      (part as { type?: string }).type === "text" ? (part as { text: string }).text : "",
+    )
+    .join(" ")
+    .trim();
 }

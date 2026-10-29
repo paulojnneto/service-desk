@@ -247,14 +247,58 @@ describe("simulated flows", () => {
     expect((await anaOpen()).length).toBe(before);
   });
 
-  it("asks again when it does not understand, then offers an analyst", async () => {
+  it("asks again when it does not understand, then offers an analyst before handing off", async () => {
     await say("blá");
     expect(await lastDecision()).toMatchObject({
       confidence: "baixa",
       action: "pediu_esclarecimento",
     });
 
-    expect(await say("xyz")).toContain("analista");
+    // Still unclear: an offer, not a handoff (stage 9, S-09.2).
+    await say("xyz");
+    expect(await lastQuestion()).toMatchObject({
+      options: ["Falar com um analista", "Vou explicar de novo"],
+    });
+    expect((await current()).state).toBe("with_agent");
+
+    await say("Falar com um analista");
+    expect((await current()).state).toBe("waiting_analyst");
+    const [handoff] = await queryRows<{ reason: string }>(db, sql`select reason from handoffs`);
+    expect(handoff?.reason).toBe("baixa_confianca");
+  });
+
+  it("keeps the conversation with the agent when the employee prefers to explain again", async () => {
+    await say("blá");
+    await say("xyz");
+
+    expect(await say("Vou explicar de novo")).toContain("outras palavras");
+    expect((await current()).state).toBe("with_agent");
+  });
+
+  it("hands off directly when the employee asks for a person in words", async () => {
+    await say("Quero falar com um analista");
+
+    const [handoff] = await queryRows<{ reason: string }>(db, sql`select reason from handoffs`);
+    expect(handoff?.reason).toBe("pedido_do_funcionario");
+  });
+
+  it("picks up from what the analyst said after a hand back", async () => {
+    await say("Quero falar com um analista");
+    const rafael = (await signIn(app, "rafael.lima@nexo.com.br")).cookie;
+    const { id } = await current();
+    await postJson(app, `/api/analyst/conversations/${id}/take-over`, {}, rafael);
+    await postJson(
+      app,
+      `/api/analyst/conversations/${id}/messages`,
+      { clientId: "r1", text: "Reiniciei sua VPN remotamente, já deve funcionar." },
+      rafael,
+    );
+    await postJson(app, `/api/analyst/conversations/${id}/hand-back`, {}, rafael);
+
+    const answer = await say("Obrigada!");
+
+    expect(answer).toContain("Rafael Lima");
+    expect(answer).toContain("Reiniciei sua VPN remotamente");
   });
 
   it("stores a decision record for every agent reply", async () => {

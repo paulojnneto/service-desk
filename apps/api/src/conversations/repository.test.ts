@@ -94,7 +94,7 @@ describe("appendEmployeeMessage", () => {
 });
 
 describe("history", () => {
-  it("comes back in order with authors, and the agent reads only employee and agent messages", async () => {
+  it("comes back in order with authors; the agent reads people and notes with a prefix", async () => {
     await send("ana.souza", "c1", "pergunta");
     await appendMessage(db, "ana.souza", { author: "agent", parts: text("resposta") }, now);
     await appendMessage(
@@ -116,7 +116,13 @@ describe("history", () => {
       ["assistant", "system"],
     ]);
     expect(view.messages[2]?.metadata.authorName).toBe("Rafael Lima");
-    expect(toAgentHistory(rows).map((m) => m.parts)).toEqual([text("pergunta"), text("resposta")]);
+    // Stage 9 (S-09.11): what a person or the system wrote reaches the agent, marked as such.
+    expect(toAgentHistory(rows).map((m) => [m.role, m.parts])).toEqual([
+      ["user", text("pergunta")],
+      ["assistant", text("resposta")],
+      ["assistant", text("[Analista Rafael Lima] assumi")],
+      ["assistant", text("[Nota do sistema] transferida")],
+    ]);
   });
 
   it("does not append to a conversation that is not open", async () => {
