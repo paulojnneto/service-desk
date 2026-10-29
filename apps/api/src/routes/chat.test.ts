@@ -361,6 +361,39 @@ describe("chat route", () => {
   });
 });
 
+describe("deadline (stage 11)", () => {
+  it("ends a turn that passes its deadline: an error, nothing saved, and the retry works", async () => {
+    // An agent that starts a reply and never finishes it, ignoring the abort signal.
+    const hanging = vi.fn<RunAgent>(
+      async () =>
+        new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            controller.enqueue({ type: "start" });
+            controller.enqueue({ type: "text-start", id: "t" });
+            controller.enqueue({ type: "text-delta", id: "t", delta: "Pela met" });
+          },
+        }),
+    );
+    const slow = await createTestApp({ db, runAgent: hanging, turnDeadlineMs: 100 });
+    const cookie = (await signIn(slow.app, "ana.souza@nexo.com.br")).cookie;
+
+    const body = await (await send(cookie, "m1", "oi", slow.app)).text();
+
+    expect(parseEvents(body).at(-1)).toMatchObject({ type: "error" });
+    expect(hanging.mock.calls[0]![0]).toMatchObject({ modelSettings: { maxRetries: 1 } });
+    expect((hanging.mock.calls[0]![0] as { abortSignal?: AbortSignal }).abortSignal?.aborted).toBe(
+      true,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
+
+    const working = await createTestApp({ db, runAgent: goodReply });
+    const retry = await send(cookie, "m1", "oi", working.app);
+    await retry.text();
+    expect((await storedCount("ana.souza", 2)).map((r) => r.author)).toEqual(["employee", "agent"]);
+  });
+});
+
 describe("usage limits (stage 11)", () => {
   // Sends a message and waits until the conversation has the expected number of messages.
   async function say(
@@ -479,7 +512,8 @@ describe("buildChatParams", () => {
     const services = {} as AgentServices;
     const params = buildChatParams([], ana, services, { previousConfidence: "baixa" });
 
-    expect(Object.keys(params).sort()).toEqual(["messages", "requestContext"]);
+    expect(Object.keys(params).sort()).toEqual(["messages", "modelSettings", "requestContext"]);
+    expect(params.modelSettings).toEqual({ maxRetries: 1 });
     expect(params.requestContext.get("userId")).toBe("ana.souza");
     expect(params.requestContext.get("firstName")).toBe("Ana");
     expect(params.requestContext.get("services")).toBe(services);

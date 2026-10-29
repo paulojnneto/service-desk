@@ -19,6 +19,8 @@ export type AppOptions = {
   runAgent?: RunAgent;
   // Usage limits; from the environment unless given (stage 11).
   limits?: Limits;
+  // How long an agent turn may take (stage 11 PRD, S-11.9).
+  turnDeadlineMs?: number;
 };
 
 // Backend for the UI: runs the agent, so model keys never reach the browser.
@@ -29,6 +31,7 @@ export function createApp({
   now = () => new Date(),
   runAgent = runNexoAssist,
   limits = readLimits(),
+  turnDeadlineMs = 60_000,
 }: AppOptions) {
   const app = new Hono<AppEnv>();
 
@@ -40,6 +43,7 @@ export function createApp({
     c.set("now", now);
     c.set("runAgent", runAgent);
     c.set("limits", limits);
+    c.set("turnDeadlineMs", turnDeadlineMs);
     await next();
   });
   app.use("/api/*", jsonOnlyPosts, session);

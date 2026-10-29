@@ -13,6 +13,7 @@ export type AppEnv = {
     now: () => Date;
     runAgent: RunAgent;
     limits: Limits;
+    turnDeadlineMs: number;
     person: Person | null;
   };
 };

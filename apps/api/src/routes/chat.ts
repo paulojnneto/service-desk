@@ -86,10 +86,15 @@ export function buildChatParams(
     previousConfidence?: Confidence;
     waitingDraft?: DraftView;
     recordUsage?: (usage: AgentUsage) => void;
+    // Ends the turn at its deadline (stage 11 PRD, S-11.9).
+    abortSignal?: AbortSignal;
   } = {},
 ) {
   return {
     messages: history as unknown as UIMessage[],
+    ...(extra.abortSignal ? { abortSignal: extra.abortSignal } : {}),
+    // One retry of a rate limit, a 5xx or a network error, done by the AI SDK (S-11.9).
+    modelSettings: { maxRetries: 1 },
     requestContext: requestContextFor({
       userId: person.id,
       firstName: person.name.split(" ")[0] ?? person.name,
@@ -286,6 +291,7 @@ export const chatRoutes = new Hono<AppEnv>()
     // The usage of this turn only, even when other turns run at the same time (S-11.1).
     let usage: AgentUsage | undefined;
     const startedAt = now().getTime();
+    const deadline = AbortSignal.timeout(c.get("turnDeadlineMs"));
     let reply: ReadableStream<UIMessageChunk>;
     try {
       reply = await c.get("runAgent")(
@@ -295,6 +301,7 @@ export const chatRoutes = new Hono<AppEnv>()
           recordUsage: (turn) => {
             usage = turn;
           },
+          abortSignal: deadline,
         }),
       );
     } catch (error) {
@@ -332,9 +339,23 @@ export const chatRoutes = new Hono<AppEnv>()
         const assembled = lastMessage(toAssemble);
         let finish: UIMessageChunk | undefined;
         const reader = toClient.getReader();
+        // Past the deadline the turn ends here, even if the agent did not stop: nothing is
+        // saved and the chat offers "Tentar de novo" (Stage 5).
+        let timedOut = false;
+        const stop = () => {
+          timedOut = true;
+          void reader.cancel();
+        };
+        deadline.addEventListener("abort", stop, { once: true });
         for (let read = await reader.read(); !read.done; read = await reader.read()) {
           if (read.value.type === "finish") finish = read.value;
           else writer.write(read.value);
+        }
+        deadline.removeEventListener("abort", stop);
+        if (timedOut) {
+          failed = true;
+          writer.write({ type: "error", errorText: "The reply took too long." });
+          return;
         }
         const parts = (await assembled)?.parts;
         if (!failed && parts) {
