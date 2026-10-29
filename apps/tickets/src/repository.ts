@@ -4,6 +4,7 @@ import {
   isOpenStatus,
   isOverdue,
   type CreateTicketInput,
+  type TakeOverInput,
   type Ticket,
   type TicketEvent,
   type TicketStatus,
@@ -146,6 +147,33 @@ export function ticketsRepository(db: Db) {
         message: summary,
       });
       return withEvents(row, now);
+    },
+
+    // An analyst took over the conversation about this ticket: a waiting ticket moves to
+    // "em andamento". That is the first response, so it starts the deadline again (R9).
+    // Any other status is left as it is, so taking over twice changes nothing.
+    async takeOver(
+      requesterId: string,
+      number: string,
+      analyst: TakeOverInput,
+      now: Date,
+    ): Promise<Ticket | WriteError> {
+      const row = await find(requesterId, number);
+      if (!row) return "not_found";
+      if (row.status !== "aguardando_analista") return withEvents(row, now);
+
+      await addEvent(number, {
+        kind: "status_changed",
+        at: now,
+        authorId: analyst.analystId,
+        message: `Assumido por ${analyst.analystName}`,
+      });
+      const [updated] = await db
+        .update(tickets)
+        .set({ status: "em_andamento", lastUpdateAt: now })
+        .where(eq(tickets.number, number))
+        .returning();
+      return withEvents(updated!, now);
     },
   };
 }

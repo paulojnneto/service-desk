@@ -65,6 +65,11 @@ export type CreateTicketInput = z.infer<typeof CreateTicketInput>;
 export const AddUpdateInput = z.object({ message: z.string().trim().min(1).max(2000) });
 export const ReopenInput = z.object({ reason: z.string().trim().min(1).max(2000) });
 export const TransferInput = z.object({ summary: z.string().trim().min(1).max(4000) });
+export const TakeOverInput = z.object({
+  analystId: z.string().trim().min(1).max(120),
+  analystName: z.string().trim().min(1).max(120),
+});
+export type TakeOverInput = z.infer<typeof TakeOverInput>;
 
 export const Article = z.object({
   id: z.string(),

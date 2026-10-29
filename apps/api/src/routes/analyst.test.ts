@@ -312,6 +312,38 @@ describe("updates", () => {
   });
 });
 
+describe("POST take-over, the related ticket", () => {
+  it("moves the handoff's ticket to em andamento", async () => {
+    const { id, rafael } = await waitingConversation();
+    await db.execute(sql`update handoffs set ticket_number = 'INC-20311'`);
+    const service = await testTickets();
+    try {
+      await post(path(id, "/take-over"), rafael);
+
+      const tickets = (await get(path(id, "/tickets"), rafael)).body as unknown as ConsoleTickets;
+      expect(tickets.related).toMatchObject({ number: "INC-20311", status: "em_andamento" });
+      const ticket = await service.client.as("ana.souza").get("INC-20311");
+      expect(ticket.events?.at(-1)?.message).toBe("Assumido por Rafael Lima");
+    } finally {
+      await service.reseed();
+    }
+  });
+
+  it("still takes the conversation over when the ticket service is down", async () => {
+    const { id, rafael } = await waitingConversation();
+    await db.execute(sql`update handoffs set ticket_number = 'INC-20311'`);
+    const service = await testTickets();
+    service.down.value = true;
+    try {
+      const { status, body } = await post(path(id, "/take-over"), rafael);
+      expect(status).toBe(200);
+      expect(body.conversation).toMatchObject({ state: "with_analyst" });
+    } finally {
+      service.down.value = false;
+    }
+  });
+});
+
 describe("GET /api/analyst/conversations/:id/tickets", () => {
   it("reads the conversation's employee's tickets, the related one first", async () => {
     const { id, rafael } = await waitingConversation();

@@ -2,6 +2,7 @@ import {
   AddUpdateInput,
   CreateTicketInput,
   ReopenInput,
+  TakeOverInput,
   TransferInput,
   type Ticket,
 } from "@nexo/shared";
@@ -66,6 +67,17 @@ export const ticketRoutes = new Hono<TicketsEnv>()
       c.get("now")(),
     );
     return respond(c, result, 201);
+  })
+  .post("/:number/take-over", async (c) => {
+    const input = await parseBody(c, TakeOverInput);
+    if (!input) return c.json({ error: "invalid_input" }, 400);
+    const result = await repo(c).takeOver(
+      c.get("requesterId"),
+      c.req.param("number"),
+      input,
+      c.get("now")(),
+    );
+    return respond(c, result, 200);
   });
 
 function repo(c: Context<TicketsEnv>) {

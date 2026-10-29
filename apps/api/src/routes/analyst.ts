@@ -103,9 +103,7 @@ export const analystRoutes = new Hono<AppEnv>()
   // checks, and only the conversation's employee can be read (decision 7).
   .get("/conversations/:id/tickets", (c) =>
     withConversation(c, async (db, row) => {
-      const related = (await listHandoffs(db, row.id)).findLast(
-        (h) => h.ticketNumber,
-      )?.ticketNumber;
+      const related = await relatedTicket(db, row.id);
       try {
         const tickets = await c.get("tickets").as(row.employeeId).list("all");
         const answer: ConsoleTickets = {
@@ -122,6 +120,7 @@ export const analystRoutes = new Hono<AppEnv>()
   .post("/conversations/:id/take-over", (c) =>
     withConversation(c, async (db, row, me) => {
       const result = await takeOver(db, row.id, me, c.get("now")());
+      if (result.status === "done") await takeOverTicket(c, db, row);
       // Taking over what one already holds is not an error.
       if (result.status === "refused" && result.conversation?.holderId === me) {
         return c.json({ conversation: await analystView(db, result.conversation) });
@@ -166,6 +165,28 @@ async function withConversation(
   } catch (error) {
     logError("Could not answer the analyst console:", error);
     return c.json({ error: "unavailable" }, 503);
+  }
+}
+
+// The ticket of the latest handoff that named one.
+async function relatedTicket(db: Db, conversationId: string) {
+  return (await listHandoffs(db, conversationId)).findLast((h) => h.ticketNumber)?.ticketNumber;
+}
+
+// The handoff's ticket moves to "em andamento" in the ticket service, as the employee: the
+// service keeps its R7 checks. As with the handoff's transfer event, the conversation is
+// already the analyst's: if the ticket service is down, that is only logged.
+async function takeOverTicket(c: C, db: Db, row: ConversationRow) {
+  const related = await relatedTicket(db, row.id);
+  if (!related) return;
+  const analyst = c.get("person")!;
+  try {
+    await c
+      .get("tickets")
+      .as(row.employeeId)
+      .takeOver(related, { analystId: analyst.id, analystName: analyst.name });
+  } catch (error) {
+    logError("Could not record the take-over on the ticket:", error);
   }
 }
 

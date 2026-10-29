@@ -38,7 +38,7 @@ describe("client and service contract", () => {
     expect((await ana.get("INC-20311")).overdue).toBe(true);
   });
 
-  it("creates, updates, reopens and transfers", async () => {
+  it("creates, updates, reopens, transfers and takes over", async () => {
     const ana = client.as("ana.souza");
 
     const created = await ana.create({
@@ -57,6 +57,12 @@ describe("client and service contract", () => {
     expect(updated.events?.at(-1)?.kind).toBe("updated");
     expect(reopened.status).toBe("aguardando_analista");
     expect(transferred.events?.at(-1)?.kind).toBe("transferred");
+
+    const taken = await ana.takeOver("INC-20311", {
+      analystId: "rafael.lima",
+      analystName: "Rafael Lima",
+    });
+    expect(taken.status).toBe("em_andamento");
   });
 
   it("turns the service's refusals into typed errors", async () => {
