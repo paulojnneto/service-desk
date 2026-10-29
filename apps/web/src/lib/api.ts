@@ -5,6 +5,7 @@ import type {
   ConsoleTickets,
   ConversationUpdates,
   HandoffView,
+  LastClosed,
   Holder,
   ConversationView,
   DraftView,
@@ -37,12 +38,24 @@ export class SignedOutError extends Error {
   }
 }
 
-// The employee's open conversation, or null before the first message (stage 5 PRD, S-05.5).
-export async function fetchCurrentConversation(): Promise<ConversationView | null> {
+// The employee's open conversation, or null before the first message (stage 5 PRD, S-05.5),
+// with the last conversation when an analyst closed it.
+export async function fetchCurrentChat(): Promise<{
+  conversation: ConversationView | null;
+  lastClosed: LastClosed | null;
+}> {
   const res = await request("/api/conversations/current");
   if (res.status === 401) throw new SignedOutError();
   if (!res.ok) throw new ApiUnavailableError();
-  return ((await res.json()) as { conversation: ConversationView | null }).conversation;
+  const body = (await res.json()) as {
+    conversation: ConversationView | null;
+    lastClosed?: LastClosed | null;
+  };
+  return { conversation: body.conversation, lastClosed: body.lastClosed ?? null };
+}
+
+export async function fetchCurrentConversation(): Promise<ConversationView | null> {
+  return (await fetchCurrentChat()).conversation;
 }
 
 // What changed in the employee's latest conversation after a message (stage 9 PRD, decision
