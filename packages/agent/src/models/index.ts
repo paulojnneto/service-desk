@@ -12,3 +12,11 @@ export function resolveModel(modelId = process.env.NEXO_AGENT_MODEL) {
   if (!modelId || modelId === "mock") return createScriptedModel(nexoScript);
   return modelId;
 }
+
+// The environment variable with the provider's key ("openai/gpt-5.5" → OPENAI_API_KEY),
+// or null for the simulated model, which needs none.
+export function providerKeyName(modelId = process.env.NEXO_AGENT_MODEL): string | null {
+  if (modelName(modelId) === "mock") return null;
+  const provider = modelId!.split("/")[0]!;
+  return `${provider.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_API_KEY`;
+}

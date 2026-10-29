@@ -21,7 +21,7 @@ The first build takes a few minutes. Then open http://localhost:8080 and sign in
 
 The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or come back another day: the conversation, the choices made and the state of each draft are still there.
 
-- **The model.** By default the stack uses the simulated model: no key, no cost, the same tools and rules. To use GPT-5.5, copy `.env.example` to `.env`, paste your OpenAI key and start again. The API's log says which model answers.
+- **The model.** By default the stack uses the simulated model: no key, no cost, the same tools and rules. To use GPT-5.5, copy `.env.example` to `.env`, paste your OpenAI key and start again. The API's log says which model answers, and warns if the key is missing.
 - **What starts.** PostgreSQL, the ticket service (not reachable from outside the stack) and the API, which also serves the screens, only on this machine. The first start creates the databases, the keys and the sample data; later starts keep them. It runs in production mode, so the session cookie is `Secure`: Chrome, Edge and Firefox accept it on `http://localhost`.
 - **Check it.** With Node 22, `node scripts/smoke.mjs` (or `pnpm smoke`) checks the running stack: the screens, sign-in, one agent turn and the console.
 - **Stop it** with `docker compose --profile app down`. `down -v` erases the data too, including the development databases, which share the same PostgreSQL.
@@ -106,7 +106,7 @@ apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent
                                         │  └──▶ PostgreSQL (nexo_api): conversations, sessions
                                         │
                                         │ packages/tickets-client
-                                        │ HTTP + JWT (ES256), used by the agent from Stage 6
+                                        │ HTTP + JWT (ES256)
                                         ▼
                                   apps/tickets ──▶ PostgreSQL (nexo_tickets)
 ```
@@ -164,7 +164,7 @@ The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (
 - **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
 - **Deadlines** (Annex A, R9) are computed in São Paulo business hours (Monday to Friday, 8:00 to 18:00): critical 1 hour, high 4 business hours, medium 3 and low 5 business days, counted from the last update. Resolved tickets are never overdue; they can be reopened for 7 calendar days.
 - **Idempotent writes:** every `POST` needs an `Idempotency-Key`; a repeat replays the first response, so a retry never creates two tickets.
-- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
+- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 4 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
 - **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
 
 ## How the agent decides
