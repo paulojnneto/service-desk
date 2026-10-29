@@ -257,3 +257,37 @@ describe("transfer", () => {
     });
   });
 });
+
+describe("take over", () => {
+  const rafael = { analystId: "rafael.lima", analystName: "Rafael Lima" };
+
+  it("moves a waiting ticket to em andamento and restarts the deadline", async () => {
+    await insertTicket({ number: "INC-20311", lastUpdateAt: daysAgo(6) });
+    const { res, json } = await as("ana.souza").post("/tickets/INC-20311/take-over", rafael);
+
+    expect(res.status).toBe(200);
+    expect(json.ticket).toMatchObject({ status: "em_andamento", overdue: false });
+    expect(json.ticket.lastUpdateAt).toBe(NOW.toISOString());
+    expect(json.ticket.events?.at(-1)).toMatchObject({
+      kind: "status_changed",
+      authorId: "rafael.lima",
+      message: "Assumido por Rafael Lima",
+    });
+  });
+
+  it("leaves any other status as it is", async () => {
+    await insertTicket({ number: "REQ-10442", status: "aprovado" });
+    const { res, json } = await as("ana.souza").post("/tickets/REQ-10442/take-over", rafael);
+
+    expect(res.status).toBe(200);
+    expect(json.ticket.status).toBe("aprovado");
+    expect(await db.select().from(ticketEvents)).toHaveLength(0);
+  });
+
+  it("answers not found for someone else's ticket", async () => {
+    await insertTicket({ number: "REQ-10439", requesterId: "carla.mendes" });
+    const { res } = await as("ana.souza").post("/tickets/REQ-10439/take-over", rafael);
+
+    expect(res.status).toBe(404);
+  });
+});
