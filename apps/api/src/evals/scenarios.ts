@@ -38,8 +38,10 @@ export const SCENARIOS: Scenario[] = [
       {
         say: "Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.",
         expect: {
-          // Duplicates and the help center are checked before any draft (R4, S-06.2).
-          toolsCalled: ["listarMeusChamados", "buscarNaCentral"],
+          // The help center first (S-06.2). Duplicates must be checked before the draft (R4),
+          // which the draft's enforced R4 shows in the next turn; listing the tickets in this
+          // turn is what Screen 2 shows, not a rule (docs/evals/2026-10-29-gpt-5.5.md).
+          toolsCalled: ["buscarNaCentral"],
           handoff: "none",
           ticketsWritten: 0,
         },

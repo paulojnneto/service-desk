@@ -73,7 +73,12 @@ for (const scenario of scenarios) {
 }
 process.stdout.write("\n\n");
 
-const info = { model, date: new Date().toISOString().slice(0, 10), repeat };
+const info = {
+  model,
+  date: new Date().toISOString().slice(0, 10),
+  repeat,
+  ...(wanted.length ? { scenarios: wanted } : {}),
+};
 console.log(consoleReport(results, info));
 
 const writeReport = values["no-report"] ? false : (values.report ?? !simulated);

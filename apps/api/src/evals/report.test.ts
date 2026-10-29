@@ -111,4 +111,10 @@ describe("markdownReport", () => {
     expect(text).toContain("### reabertura · turn 1");
     expect(text).toContain("## Analysis");
   });
+
+  it("says how to run it again, filters included", () => {
+    const text = markdownReport([result("vpn", true)], { ...info, scenarios: ["vpn"] });
+    expect(text).toContain("Run with `pnpm eval --model openai/gpt-5.5 --scenario vpn`");
+    expect(text).toContain("None.\n\n## Analysis");
+  });
 });

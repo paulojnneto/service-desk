@@ -5,7 +5,13 @@ import type { Scenario, ScenarioResult, TurnResult } from "./types";
 // every failure with the turn, what was expected, what happened and that turn's decision
 // record, so the reason can be read without opening the database.
 
-export type RunInfo = { model: string; date: string; repeat: number };
+export type RunInfo = {
+  model: string;
+  date: string;
+  repeat: number;
+  // The --scenario filters, when the run was not the whole set.
+  scenarios?: string[];
+};
 
 type ScenarioSummary = {
   scenario: Scenario;
@@ -110,6 +116,7 @@ export function markdownReport(results: ScenarioResult[], info: RunInfo): string
     "",
     "Run with `pnpm eval --model " +
       info.model +
+      (info.scenarios ?? []).map((name) => ` --scenario ${name}`).join("") +
       (info.repeat > 1 ? ` --repeat ${info.repeat}` : "") +
       "`. The scenarios and what each turn must decide are in `apps/api/src/evals/scenarios.ts`.",
     "",
@@ -120,7 +127,7 @@ export function markdownReport(results: ScenarioResult[], info: RunInfo): string
     "## Failures",
     "",
     ...(failures.length === 0
-      ? ["None."]
+      ? ["None.", ""]
       : failures.flatMap(([title, ...body]) => [
           `### ${title!.replace(/^✗ /, "")}`,
           "",
