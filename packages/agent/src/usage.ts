@@ -26,18 +26,21 @@ export function reportUsage(usage: AgentUsage) {
   for (const listener of listeners) listener(usage);
 }
 
-// From the AI SDK's usage, where any count may be missing.
+// From the usage Mastra reports, where any count may be missing. Mastra puts the cached
+// tokens in cachedInputTokens; the AI SDK's own field is the fallback (stage 11 tech spec:
+// Stage 10 read only the latter and reported none).
 export function usageOf(
   total: {
     inputTokens?: number;
     outputTokens?: number;
+    cachedInputTokens?: number;
     inputTokenDetails?: { cacheReadTokens?: number };
   },
   steps: number,
 ): AgentUsage {
   return {
     inputTokens: total.inputTokens ?? 0,
-    cachedInputTokens: total.inputTokenDetails?.cacheReadTokens ?? 0,
+    cachedInputTokens: total.cachedInputTokens ?? total.inputTokenDetails?.cacheReadTokens ?? 0,
     outputTokens: total.outputTokens ?? 0,
     steps,
   };

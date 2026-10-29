@@ -165,6 +165,14 @@ async function reply(
         messageId: row.id,
         conversationId: row.conversationId,
         createdAt: now,
+        // No model ran: the server wrote this reply.
+        model: null,
+        modelCalls: null,
+        inputTokens: null,
+        cachedInputTokens: null,
+        outputTokens: null,
+        durationMs: null,
+        costUsd: null,
       })
     : null;
 }

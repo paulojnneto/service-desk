@@ -234,10 +234,11 @@ A failure names the turn, the check, what was expected and what happened, and sh
 
 **Results with GPT-5.5** (2026-10-29):
 
-| Run                                                      | Scenarios      | Model calls | Input tokens | Output tokens | Time  |
-| -------------------------------------------------------- | -------------- | ----------- | ------------ | ------------- | ----- |
-| [Full set](docs/evals/2026-10-29-gpt-5.5.md)             | 12 of 13       | 52          | 178,296      | 5,133         | 132 s |
-| [VPN scenario again](docs/evals/2026-10-29-gpt-5.5-2.md) | 1 of 1 (12/12) | 7           | 27,339       | 810           | 21 s  |
+| Run                                                      | Scenarios      | Model calls | Input tokens         | Output tokens | Time  |
+| -------------------------------------------------------- | -------------- | ----------- | -------------------- | ------------- | ----- |
+| [Full set](docs/evals/2026-10-29-gpt-5.5.md)             | 12 of 13       | 52          | 178,296              | 5,133         | 132 s |
+| [VPN scenario again](docs/evals/2026-10-29-gpt-5.5-2.md) | 1 of 1 (12/12) | 7           | 27,339               | 810           | 21 s  |
+| [Full set, Stage 11](docs/evals/2026-10-29-gpt-5.5-3.md) | 13 of 13       | 49          | 168,701 (77% cached) | 5,211         | 140 s |
 
 The hard cases all passed:
 
@@ -251,11 +252,7 @@ The hard cases all passed:
 
 The one failure was an expectation taken from the prototype rather than from Annex A: listing the tickets in the first VPN turn. The duplicate check did run, enforced in code, before the draft. The scenario was corrected and run again, and both reports are kept.
 
-What the runs also showed, for Stage 11:
-
-- about 4 model calls and 14,000 input tokens per conversation;
-- no cached tokens yet;
-- an R8 the model sometimes cites for no reason. The decision detail keeps it apart from the rules the code guarantees.
+The runs also showed about 4 model calls and 14,000 input tokens per conversation, and an R8 the model sometimes cites for no reason; the decision detail keeps it apart from the rules the code guarantees. Stage 10 reported no cached tokens: that came from reading the wrong field, fixed in Stage 11 (see [Model, cost and limits](#model-cost-and-limits)).
 
 ## Ticket service
 
@@ -268,14 +265,51 @@ The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (
 - **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
 - **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
 
-## Model
+## Model, cost and limits
 
 The model is set by `NEXO_AGENT_MODEL` in `apps/api/.env.local`:
 
 - `mock` or empty (default): the simulated model in `packages/agent/src/models`. A script follows the prototype's flows and decides which tools to call, and Mastra runs the real tools, so drafts, priority and duplicate checks are real. It is used to build the screens and to run the tests with no key and no cost.
-- A Mastra model router ID, such as `openai/gpt-5.5` (the reference since Stage 6), together with its key (for example `OPENAI_API_KEY`).
+- `openai/gpt-5.5` with `OPENAI_API_KEY`: **the chosen model**. Any other Mastra model router ID works with its provider's key.
 
-The final model choice and its cost rationale come in Stage 11.
+**Why GPT-5.5.** Both candidates ran the full eval set once ([comparison](docs/evals/2026-10-29-comparison.md)):
+
+| Model                 | Scenarios | Per conversation | Time per turn |
+| --------------------- | --------- | ---------------- | ------------- |
+| `openai/gpt-5.5`      | 13 of 13  | US$ 0.032        | 7.8 s         |
+| `openai/gpt-5.4-mini` | 9 of 13   | US$ 0.003        | 3.8 s         |
+
+The rule was quality first. No default may fail a scenario of R3, R5, R6 or R7, the rules that protect the employee and their data. GPT-5.4 mini is ten times cheaper and twice as fast, but it failed three handoff (R6) scenarios:
+
+- a critical case became a draft instead of a handoff;
+- two unclear messages never led to an analyst;
+- it said "vou encaminhar para o analista" without doing it.
+
+**Cost per conversation** with GPT-5.5, at the prices read on 2026-10-29 (US$ 5.00 input, 0.50 cached input, 30.00 output, per million tokens):
+
+- **Typical conversation:** about US$ 0.03, the average of the 13 reference conversations.
+- **Longest in the set:** about US$ 0.06, the VPN error 809 conversation (three turns, a draft and a confirmation, 7 model calls).
+- **Per employee turn:** about US$ 0.023.
+
+Each reply stores its model, calls, tokens, duration and estimated cost with its decision. The prices live in `packages/shared/src/costs.ts`, with the date they were read.
+
+**What keeps the cost down.**
+
+- **Prompt caching.** The instructions and the tools come first and do not change between calls, so 77% of the input tokens were read from the provider's cache. Without it, the same run would cost about US$ 1.00 instead of US$ 0.41.
+- **A lean history.** In older replies, the tool outputs (ticket lists, article bodies) become one line with each tool and its result; the last reply goes whole.
+- **Bounded turns.** At most 6 model calls and 60 seconds per turn, with one retry of a rate limit or a provider error.
+
+**Limits**, all in `apps/api/.env.local`. A value of 0 turns a limit off:
+
+| Variable                   | Default                                   | What happens past it                                                                                                                   |
+| -------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXO_AGENT_TURNS_PER_DAY` | 40                                        | That employee gets a fixed reply until the next day (São Paulo time), without the model. "Quero falar com um analista" still hands off |
+| `NEXO_DAILY_BUDGET_USD`    | 5                                         | Everyone gets the fixed reply until the next day; the analyst console keeps working                                                    |
+| Per address (in code)      | 10 sign-ins and 30 chat messages a minute | `429`. Set `TRUST_PROXY=1` behind a proxy that sets `x-forwarded-for`                                                                  |
+
+At these defaults, one employee costs at most about US$ 0.92 a day, and US$ 5 covers about 150 typical conversations a day for everyone.
+
+**Security and privacy** were reviewed item by item in [docs/security.md](docs/security.md), with the evidence for each check and what stays open.
 
 ## Prototype
 

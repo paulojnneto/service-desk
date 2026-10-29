@@ -3,7 +3,9 @@ import { createMiddleware } from "hono/factory";
 import type { Db } from "./db/connect";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { RunAgent } from "./routes/chat";
+import type { Limits } from "./limits";
 import { readSession } from "./session";
+import { logError } from "./log";
 
 export type AppEnv = {
   Variables: {
@@ -11,6 +13,8 @@ export type AppEnv = {
     tickets: TicketsClient;
     now: () => Date;
     runAgent: RunAgent;
+    limits: Limits;
+    turnDeadlineMs: number;
     person: Person | null;
   };
 };
@@ -22,7 +26,7 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
     data = await readSession(c);
   } catch (error) {
     // A database blip must not look like being signed out.
-    console.error("Could not read the session:", error);
+    logError("Could not read the session:", error);
     return c.json({ error: "unavailable" }, 503);
   }
   const person = data ? findPersonById(data.userId) : undefined;

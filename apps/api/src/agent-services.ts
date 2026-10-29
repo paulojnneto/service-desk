@@ -3,6 +3,7 @@ import type { TicketsClient } from "@nexo/tickets-client";
 import { handOffConversation } from "./conversations/repository";
 import type { Db } from "./db/connect";
 import { discardWaitingDraft, prepareDraft } from "./drafts/repository";
+import { logError } from "./log";
 
 // What the agent can do in one request, for one person and one conversation (stage 6 tech
 // spec). Tickets are read only: there is deliberately no create, update or reopen here.
@@ -52,7 +53,7 @@ export function buildAgentServices(deps: {
         } catch (error) {
           // A closed ticket takes no transfer event; anything else is only logged.
           if ((error as { kind?: string }).kind !== "conflict") {
-            console.error("Could not record the transfer on the ticket:", error);
+            logError("Could not record the transfer on the ticket:", error);
           }
         }
       }

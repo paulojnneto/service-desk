@@ -26,3 +26,15 @@ jobs:
       # fails here. Real-model runs are manual (docs/evals).
       - run: pnpm eval
       - run: pnpm build
+
+  # Keys never enter the repository (stage 11 PRD, S-11.12): gitleaks scans every commit of
+  # the history on each push and pull request.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

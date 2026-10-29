@@ -4,6 +4,7 @@ import { requireRole, type AppEnv } from "../auth";
 import { EditDraftInput } from "@nexo/shared";
 import { cancelDraft, confirmDraft, type DraftOutcome } from "../drafts/confirm";
 import { editDraft, type EditOutcome } from "../drafts/edit";
+import { logError } from "../log";
 
 // "Confirmar" and "Cancelar" on a draft (stage 6 PRD, S-06.5 and S-06.6). Confirming is an
 // explicit action of the employee, never something the model can do.
@@ -45,7 +46,7 @@ async function run(
       id.data,
     );
   } catch (error) {
-    console.error("Could not decide on the draft:", error);
+    logError("Could not decide on the draft:", error);
     return c.json({ error: "unavailable" }, 503);
   }
 

@@ -25,7 +25,8 @@ export async function createTestApp(options: Partial<AppOptions> = {}) {
     await resetTestDb(db);
   }
   const tickets = options.tickets ?? (await testTickets()).client;
-  return { app: createApp({ ...options, db, tickets }), db, tickets };
+  // Tests sign in many times from one address; the rate-limit tests turn it on themselves.
+  return { app: createApp({ rateLimits: false, ...options, db, tickets }), db, tickets };
 }
 
 let ticketsService: Promise<TestTickets> | undefined;

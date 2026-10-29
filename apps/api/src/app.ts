@@ -4,6 +4,8 @@ import { session, type AppEnv } from "./auth";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { Db } from "./db/connect";
 import { analystRoutes } from "./routes/analyst";
+import { readLimits, type Limits } from "./limits";
+import { DEFAULT_RATE_LIMITS, rateLimit, type RateLimits } from "./rate-limit";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes, runNexoAssist, type RunAgent } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
@@ -16,6 +18,12 @@ export type AppOptions = {
   now?: () => Date;
   // The agent run; tests replace it to fail or to inspect what the agent receives.
   runAgent?: RunAgent;
+  // Usage limits; from the environment unless given (stage 11).
+  limits?: Limits;
+  // How long an agent turn may take (stage 11 PRD, S-11.9).
+  turnDeadlineMs?: number;
+  // Per-address limits on sign-in and chat; false turns them off (tests sign in many times).
+  rateLimits?: RateLimits | false;
 };
 
 // Backend for the UI: runs the agent, so model keys never reach the browser.
@@ -25,6 +33,9 @@ export function createApp({
   tickets,
   now = () => new Date(),
   runAgent = runNexoAssist,
+  limits = readLimits(),
+  turnDeadlineMs = 60_000,
+  rateLimits = DEFAULT_RATE_LIMITS,
 }: AppOptions) {
   const app = new Hono<AppEnv>();
 
@@ -35,8 +46,14 @@ export function createApp({
     c.set("tickets", tickets);
     c.set("now", now);
     c.set("runAgent", runAgent);
+    c.set("limits", limits);
+    c.set("turnDeadlineMs", turnDeadlineMs);
     await next();
   });
+  if (rateLimits) {
+    app.post("/api/auth/sign-in", rateLimit(rateLimits.signInPerMinute));
+    app.post("/api/chat", rateLimit(rateLimits.chatPerMinute));
+  }
   app.use("/api/*", jsonOnlyPosts, session);
   app.route("/api/auth", authRoutes);
   app.route("/api/chat", chatRoutes);

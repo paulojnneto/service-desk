@@ -34,6 +34,17 @@ export type MessageRow = typeof messages.$inferSelect;
 export type DecisionRow = typeof decisions.$inferSelect;
 export type HandoffRow = typeof handoffs.$inferSelect;
 
+// The model's usage for an agent reply, stored with its decision (stage 11 PRD, S-11.1).
+export type ReplyUsage = {
+  model: string;
+  modelCalls: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  costUsd: number | null;
+};
+
 export type AppendResult =
   { status: "saved" | "duplicate"; conversation: ConversationRow } | { status: "limit_reached" };
 
@@ -132,6 +143,7 @@ export async function appendMessage(
     authorId?: string;
     parts: unknown[];
     decision?: DecisionRecord;
+    usage?: ReplyUsage;
   },
   now: Date,
 ): Promise<MessageRow | null> {
@@ -159,6 +171,7 @@ export async function appendMessage(
         messageId: row.id,
         conversationId: open.id,
         ...message.decision,
+        ...message.usage,
         createdAt: now,
       });
     }
@@ -391,6 +404,23 @@ export async function appendAnalystMessage(
       .returning();
     return { status: "saved", message: row! };
   });
+}
+
+// What the limits count since `since` (stage 11 PRD, S-11.6 and S-11.7): this employee's agent
+// turns and the estimated cost of every agent turn. Server replies do not count.
+export async function usageSince(db: Db, employeeId: string, since: Date) {
+  const [row] = await db
+    .select({
+      employeeTurns:
+        sql<number>`count(*) filter (where ${conversations.employeeId} = ${employeeId})`.mapWith(
+          Number,
+        ),
+      costUsd: sql<number>`coalesce(sum(${decisions.costUsd}), 0)`.mapWith(Number),
+    })
+    .from(decisions)
+    .innerJoin(conversations, eq(conversations.id, decisions.conversationId))
+    .where(and(eq(decisions.source, "agent"), gte(decisions.createdAt, since)));
+  return { employeeTurns: row?.employeeTurns ?? 0, costUsd: row?.costUsd ?? 0 };
 }
 
 // --- Console reads (stage 9 PRD, S-09.3, S-09.4 and S-09.12) ---------------------------------

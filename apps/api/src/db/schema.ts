@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgSequence,
   pgTable,
   text,
@@ -172,10 +173,21 @@ export const decisions = pgTable(
     tools: jsonb("tools").notNull(),
     source: text("source").notNull().default("agent"),
     registered: boolean("registered").notNull().default(true),
+    // The model's usage for the turn (stage 11 PRD, S-11.1); null for server replies and for
+    // replies stored before Stage 11.
+    model: text("model"),
+    modelCalls: integer("model_calls"),
+    inputTokens: integer("input_tokens"),
+    cachedInputTokens: integer("cached_input_tokens"),
+    outputTokens: integer("output_tokens"),
+    durationMs: integer("duration_ms"),
+    costUsd: numeric("cost_usd", { precision: 10, scale: 6, mode: "number" }),
     createdAt: moment("created_at").notNull(),
   },
   (t) => [
     index("decisions_conversation_idx").on(t.conversationId),
+    // The per-day sums of the limits (S-11.6, S-11.7).
+    index("decisions_created_idx").on(t.createdAt),
     check("decisions_confidence_check", sql`${t.confidence} in ('alta', 'media', 'baixa')`),
     check("decisions_source_check", sql`${t.source} in ('agent', 'server')`),
   ],

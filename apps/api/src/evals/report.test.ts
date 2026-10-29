@@ -106,7 +106,7 @@ describe("markdownReport", () => {
 
     expect(text).toContain("# Evals: openai/gpt-5.5, 2026-10-29");
     expect(text).toContain(
-      "| `reabertura` | Cenário reabertura | R5 | ✗ failed | 1/2 | 2 | 1,000 (600) | 80 | 1.5 s |",
+      "| `reabertura` | Cenário reabertura | R5 | ✗ failed | 1/2 | 2 | 1,000 (600) | 80 | US$ 0.0047 | 1.5 s |",
     );
     expect(text).toContain("### reabertura · turn 1");
     expect(text).toContain("## Analysis");

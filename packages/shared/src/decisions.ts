@@ -37,6 +37,8 @@ export const DecisionAction = z.enum([
   "atualizou_chamado",
   "reabriu_chamado",
   "cancelou_rascunho",
+  // Written by the server past a usage limit, without the model (stage 11 PRD, S-11.6).
+  "limite_de_uso",
 ]);
 export type DecisionAction = z.infer<typeof DecisionAction>;
 

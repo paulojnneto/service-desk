@@ -1,6 +1,7 @@
 import { onAgentUsage, type AgentServices, type AgentUsage } from "@nexo/agent";
 import { findPersonById, MESSAGES_PER_SESSION, type Person } from "@nexo/shared";
 import type { UIMessageChunk } from "ai";
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendEmployeeMessage,
@@ -10,6 +11,7 @@ import {
   setConversationState,
 } from "../conversations/repository";
 import type { Db } from "../db/connect";
+import { HANDOFF_PAST_LIMIT_TEXT, LIMIT_TEXT } from "../limits";
 import { createTestApp, signIn } from "../test-app";
 import { buildChatParams, parseChatBody, runNexoAssist, type RunAgent } from "./chat";
 
@@ -294,7 +296,49 @@ describe("chat route", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(events.some((e) => e.type === "message-metadata")).toBe(false);
+    // The model's own message ("model overloaded") does not reach the browser.
+    expect(events.find((e) => e.type === "error")).toEqual({
+      type: "error",
+      errorText: "unavailable",
+    });
     expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
+  });
+
+  it("stores the turn's model, calls, tokens, duration and cost with its decision (stage 11)", async () => {
+    const cookie = await cookieFor("ana.souza@nexo.com.br");
+    await (await send(cookie, "m1")).text();
+
+    const rows = await storedCount("ana.souza", 2);
+    const [decision] = await listDecisions(db, rows[0]!.conversationId);
+    expect(decision).toMatchObject({
+      model: "mock",
+      modelCalls: 2,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    expect(decision?.durationMs).toEqual(expect.any(Number));
+  });
+
+  it("keeps each turn's usage apart when two run at once", async () => {
+    const [ana, bruno] = await Promise.all([
+      cookieFor("ana.souza@nexo.com.br"),
+      cookieFor("bruno.tavares@nexo.com.br"),
+    ]);
+    // VPN: the lookups, the Windows question, then the answer. Hours: the lookup, then the answer.
+    const read = async (res: Response | Promise<Response>) => (await res).text();
+    await Promise.all([
+      read(send(ana, "a1", "Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.")),
+      read(send(bruno, "b1")),
+    ]);
+
+    const anaRows = await storedCount("ana.souza", 2);
+    const brunoRows = await storedCount("bruno.tavares", 2);
+    const [anaDecision] = await listDecisions(db, anaRows[0]!.conversationId);
+    const [brunoDecision] = await listDecisions(db, brunoRows[0]!.conversationId);
+    expect(anaDecision).toMatchObject({ action: "consultou_chamados", modelCalls: 3 });
+    expect(brunoDecision).toMatchObject({ action: "respondeu_central", modelCalls: 2 });
   });
 
   it("reports the turn's model calls when it finishes (stage 10)", async () => {
@@ -322,6 +366,133 @@ describe("chat route", () => {
   });
 });
 
+describe("deadline (stage 11)", () => {
+  it("ends a turn that passes its deadline: an error, nothing saved, and the retry works", async () => {
+    // An agent that starts a reply and never finishes it, ignoring the abort signal.
+    const hanging = vi.fn<RunAgent>(
+      async () =>
+        new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            controller.enqueue({ type: "start" });
+            controller.enqueue({ type: "text-start", id: "t" });
+            controller.enqueue({ type: "text-delta", id: "t", delta: "Pela met" });
+          },
+        }),
+    );
+    const slow = await createTestApp({ db, runAgent: hanging, turnDeadlineMs: 100 });
+    const cookie = (await signIn(slow.app, "ana.souza@nexo.com.br")).cookie;
+
+    const body = await (await send(cookie, "m1", "oi", slow.app)).text();
+
+    expect(parseEvents(body).at(-1)).toMatchObject({ type: "error" });
+    expect(hanging.mock.calls[0]![0]).toMatchObject({ modelSettings: { maxRetries: 1 } });
+    expect((hanging.mock.calls[0]![0] as { abortSignal?: AbortSignal }).abortSignal?.aborted).toBe(
+      true,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
+
+    const working = await createTestApp({ db, runAgent: goodReply });
+    const retry = await send(cookie, "m1", "oi", working.app);
+    await retry.text();
+    expect((await storedCount("ana.souza", 2)).map((r) => r.author)).toEqual(["employee", "agent"]);
+  });
+});
+
+describe("usage limits (stage 11)", () => {
+  // Sends a message and waits until the conversation has the expected number of messages.
+  async function say(
+    target: App,
+    cookie: string,
+    employeeId: string,
+    text: string,
+    length: number,
+  ) {
+    await (await send(cookie, crypto.randomUUID(), text, target)).text();
+    const rows = await storedCount(employeeId, length);
+    const last = rows.at(-1)!;
+    return {
+      author: last.author,
+      text: (last.parts as { type: string; text?: string }[]).map((p) => p.text ?? "").join(""),
+    };
+  }
+
+  it("answers past the employee's allowance without the agent, and starts again the next day", async () => {
+    const today = new Date("2026-10-29T15:00:00Z");
+    const limited = await createTestApp({
+      db,
+      runAgent,
+      now: () => today,
+      limits: { turnsPerDay: 2, dailyBudgetUsd: 0 },
+    });
+    const ana = (await signIn(limited.app, "ana.souza@nexo.com.br")).cookie;
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 2);
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 4);
+    runAgent.mockClear();
+
+    const third = await say(limited.app, ana, "ana.souza", "E aos sábados?", 6);
+
+    expect(third).toEqual({ author: "agent", text: LIMIT_TEXT.employee });
+    expect(runAgent).not.toHaveBeenCalled();
+    const open = await findOpenConversation(db, "ana.souza");
+    const decisions = await listDecisions(db, open!.id);
+    expect(decisions.at(-1)).toMatchObject({ action: "limite_de_uso", source: "server" });
+
+    // Another employee is not affected.
+    const bruno = (await signIn(limited.app, "bruno.tavares@nexo.com.br")).cookie;
+    expect(
+      (await say(limited.app, bruno, "bruno.tavares", "Qual o horário do service desk?", 2)).text,
+    ).not.toBe(LIMIT_TEXT.employee);
+
+    // The next São Paulo day counts again.
+    const tomorrow = await createTestApp({
+      db,
+      runAgent,
+      now: () => new Date("2026-10-30T15:00:00Z"),
+      limits: { turnsPerDay: 2, dailyBudgetUsd: 0 },
+    });
+    // A new sign-in: yesterday's session has expired by tomorrow's clock.
+    const anaTomorrow = (await signIn(tomorrow.app, "ana.souza@nexo.com.br")).cookie;
+    const again = await say(
+      tomorrow.app,
+      anaTomorrow,
+      "ana.souza",
+      "Qual o horário do service desk?",
+      8,
+    );
+    expect(again.text).not.toBe(LIMIT_TEXT.employee);
+  });
+
+  it("pauses everyone at the daily budget, still hands off, and leaves the analyst working", async () => {
+    const limited = await createTestApp({
+      db,
+      runAgent,
+      limits: { turnsPerDay: 0, dailyBudgetUsd: 0.5 },
+    });
+    const ana = (await signIn(limited.app, "ana.souza@nexo.com.br")).cookie;
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 2);
+    await db.execute(sql`update decisions set cost_usd = 0.6`);
+    runAgent.mockClear();
+
+    const paused = await say(limited.app, ana, "ana.souza", "E aos sábados?", 4);
+    expect(paused.text).toBe(LIMIT_TEXT.budget);
+
+    const handedOff = await say(limited.app, ana, "ana.souza", "Quero falar com um analista", 7);
+    expect(handedOff.text).toBe(HANDOFF_PAST_LIMIT_TEXT);
+    expect(runAgent).not.toHaveBeenCalled();
+    const open = await findOpenConversation(db, "ana.souza");
+    expect(open?.state).toBe("waiting_analyst");
+
+    const rafael = (await signIn(limited.app, "rafael.lima@nexo.com.br")).cookie;
+    const takeOver = await limited.app.request(`/api/analyst/conversations/${open!.id}/take-over`, {
+      method: "POST",
+      headers: { cookie: rafael, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(takeOver.status).toBe(200);
+  });
+});
+
 describe("parseChatBody", () => {
   it("keeps only the text the employee typed", () => {
     expect(
@@ -346,7 +517,8 @@ describe("buildChatParams", () => {
     const services = {} as AgentServices;
     const params = buildChatParams([], ana, services, { previousConfidence: "baixa" });
 
-    expect(Object.keys(params).sort()).toEqual(["messages", "requestContext"]);
+    expect(Object.keys(params).sort()).toEqual(["messages", "modelSettings", "requestContext"]);
+    expect(params.modelSettings).toEqual({ maxRetries: 1 });
     expect(params.requestContext.get("userId")).toBe("ana.souza");
     expect(params.requestContext.get("firstName")).toBe("Ana");
     expect(params.requestContext.get("services")).toBe(services);
@@ -359,6 +531,7 @@ type StreamEvent = {
   toolName?: string;
   delta?: string;
   messageMetadata?: Record<string, unknown>;
+  errorText?: string;
 };
 
 // Reads the server-sent events of a UI message stream ("data: {...}" lines).

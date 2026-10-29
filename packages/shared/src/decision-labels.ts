@@ -38,6 +38,7 @@ export const ACTION_LABELS: Record<DecisionAction, string> = {
   atualizou_chamado: "Acrescentou a informação ao chamado",
   reabriu_chamado: "Reabriu o chamado",
   cancelou_rascunho: "Descartou o rascunho",
+  limite_de_uso: "Respondeu sem o agente: limite de uso atingido",
 };
 
 // Three levels, each with a fixed meaning (stage 6 PRD, decision 4; stage 8 PRD, decision 3).
