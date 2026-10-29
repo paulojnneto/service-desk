@@ -20,6 +20,8 @@ export type DraftActions = {
   cancel: (id: string) => void;
   // Resolves to true when saved.
   save: (id: string, input: EditDraftInput) => Promise<boolean>;
+  // The analyst console shows drafts without their buttons (stage 9 tech spec).
+  readOnly?: boolean;
 };
 
 export function DraftCard({ snapshot, actions }: { snapshot: DraftView; actions: DraftActions }) {
@@ -29,7 +31,7 @@ export function DraftCard({ snapshot, actions }: { snapshot: DraftView; actions:
   const error = actions.error?.id === draft.id ? actions.error.message : null;
   const waiting = draft.status === "pending";
 
-  const footer = waiting && !editing && (
+  const footer = waiting && !editing && !actions.readOnly && (
     <>
       <button
         type="button"

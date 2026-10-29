@@ -39,7 +39,16 @@ export type CardContext = {
 // Replies from the agent, or from an analyst once the conversation is handed off (Stage 9).
 // As in the prototype, a ticket card comes before the text, a question with options sits in
 // the same bubble as the text, and the picker and the draft follow it.
-export function AgentMessage({ message, context }: { message: UIMessage; context?: CardContext }) {
+export function AgentMessage({
+  message,
+  context,
+  mirrored = false,
+}: {
+  message: UIMessage;
+  context?: CardContext;
+  // The analyst console puts Nexo Assist and analysts on the right (Screens 4 and 5).
+  mirrored?: boolean;
+}) {
   const [explained, setExplained] = useState(false);
   const detailId = useId();
   const labels = actionLabels(message);
@@ -70,7 +79,7 @@ export function AgentMessage({ message, context }: { message: UIMessage; context
   const pick = (choice: string) => context?.onPick(choice);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={`flex flex-col gap-1.5 ${mirrored ? "items-end" : ""}`}>
       <StatusLine
         name={name}
         level={metadata?.author === "analyst" ? metadata.authorLevel : undefined}

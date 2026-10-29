@@ -1,5 +1,10 @@
 import type {
+  AnalystConversationView,
+  ConsoleFilter,
+  ConsoleList,
+  ConsoleTickets,
   ConversationUpdates,
+  HandoffView,
   ConversationView,
   DraftView,
   EditDraftInput,
@@ -118,6 +123,40 @@ export async function signIn(input: {
     return (await res.json()) as { error: SignInError };
   }
   return { error: "unavailable" };
+}
+
+// --- Analyst console (stage 9) ---------------------------------------------------------------
+
+async function readJson<T>(res: Response): Promise<T> {
+  if (res.status === 401) throw new SignedOutError();
+  if (!res.ok) throw new ApiUnavailableError();
+  return (await res.json()) as T;
+}
+
+export async function fetchConsoleList(filter: ConsoleFilter, query: string): Promise<ConsoleList> {
+  const params = new URLSearchParams({ filter, q: query });
+  return readJson(await request(`/api/analyst/conversations?${params}`));
+}
+
+// null when the conversation does not exist.
+export async function fetchAnalystConversation(
+  id: string,
+): Promise<AnalystConversationView | null> {
+  const res = await request(`/api/analyst/conversations/${encodeURIComponent(id)}`);
+  if (res.status === 404 || res.status === 400) return null;
+  return (await readJson<{ conversation: AnalystConversationView }>(res)).conversation;
+}
+
+export type AnalystUpdates = ConversationUpdates & { handoffs: HandoffView[] };
+
+export async function fetchAnalystUpdates(id: string, after: number): Promise<AnalystUpdates> {
+  return readJson(
+    await request(`/api/analyst/conversations/${encodeURIComponent(id)}/updates?after=${after}`),
+  );
+}
+
+export async function fetchConsoleTickets(id: string): Promise<ConsoleTickets> {
+  return readJson(await request(`/api/analyst/conversations/${encodeURIComponent(id)}/tickets`));
 }
 
 export async function signOut(): Promise<void> {
