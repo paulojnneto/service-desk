@@ -125,6 +125,53 @@ describe("history", () => {
     ]);
   });
 
+  it("sends older tool outputs to the agent as short lines, and the last reply whole (stage 11)", async () => {
+    const tool = (name: string, input: unknown, output: unknown) => ({
+      type: `tool-${name}`,
+      toolCallId: `call-${name}`,
+      state: "output-available",
+      input,
+      output,
+    });
+    const affected = {
+      kind: "options",
+      question: "Quem está sendo afetado?",
+      options: ["Só eu", "Minha equipe"],
+    };
+    await send("ana.souza", "c1", "VPN com erro 809");
+    await appendMessage(
+      db,
+      "ana.souza",
+      {
+        author: "agent",
+        parts: [
+          tool("listarMeusChamados", { escopo: "abertos" }, { chamados: ["…uma lista longa…"] }),
+          tool("buscarNaCentral", { pergunta: "VPN erro 809" }, { artigos: ["…um artigo longo…"] }),
+          tool("registrarDecisao", {}, { registrado: true }),
+          ...text("Vou abrir um chamado."),
+          tool("perguntar", { pergunta: affected.question }, { pergunta: affected }),
+        ],
+      },
+      now,
+    );
+    await send("ana.souza", "c2", "Como está o INC-20311?");
+    const last = [
+      tool("consultarChamado", { numero: "INC-20311" }, { chamado: {} }),
+      ...text("Venceu."),
+    ];
+    await appendMessage(db, "ana.souza", { author: "agent", parts: last }, now);
+
+    const open = await findOpenConversation(db, "ana.souza");
+    const history = toAgentHistory(await listMessages(db, open!.id));
+
+    expect(history[1]?.parts).toEqual([
+      ...text("Vou abrir um chamado."),
+      ...text("[Ferramentas: listarMeusChamados abertos (ok), buscarNaCentral VPN erro 809 (ok)]"),
+      ...text("[Pergunta: Quem está sendo afetado? Opções: Só eu, Minha equipe]"),
+    ]);
+    expect(history[3]?.parts).toEqual(last);
+  });
+
   it("does not append to a conversation that is not open", async () => {
     expect(await appendMessage(db, "ana.souza", { author: "agent", parts: text("x") }, now)).toBe(
       null,
