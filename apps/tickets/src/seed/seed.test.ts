@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { createTestDb } from "../db/test-db";
 import { signTestToken, testKeys } from "../test-tokens";
-import { seedDatabase } from "./seed";
+import { isEmpty, seedDatabase } from "./seed";
 
 // The scenarios must hold whatever day the seed runs: a Wednesday morning and a Saturday night.
 const MOMENTS = {
@@ -66,5 +66,16 @@ describe.each(Object.entries(MOMENTS))("sample data seeded on %s", (_label, now)
     const { articles } = await get("ana.souza", "/articles/search?q=vpn%20809");
 
     expect(articles[0]?.id).toBe("vpn-erro-809");
+  });
+});
+
+describe("isEmpty", () => {
+  it("is true before the first seed and false after it", async () => {
+    const db = await createTestDb();
+    expect(await isEmpty(db)).toBe(true);
+
+    await seedDatabase(db);
+
+    expect(await isEmpty(db)).toBe(false);
   });
 });
