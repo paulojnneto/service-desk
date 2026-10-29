@@ -1,6 +1,6 @@
 # Security, privacy and resilience review
 
-Done on 2026-10-29 in Stage 11 (PRD S-11.10 and S-11.11). Each item says what was checked and where the evidence is, as a test or a reference in the code. The issues found were fixed in their own commits, listed at the end, and what stays open is listed with its reason.
+Done on 2026-10-29 in Stage 11 (PRD S-11.10 and S-11.11), and completed in Stage 12 for the security headers and the Docker Compose stack. Each item says what was checked and where the evidence is, as a test or a reference in the code. The issues found were fixed in their own commits, listed at the end, and what stays open is listed with its reason.
 
 ## Who can see what
 
@@ -18,14 +18,15 @@ Done on 2026-10-29 in Stage 11 (PRD S-11.10 and S-11.11). Each item says what wa
 
 ## Sessions and requests
 
-| Check                                                                                                                                                                                               | Evidence                                                                                          |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| The cookie holds a sealed random id, httpOnly, SameSite=Lax, Secure in production; the database keeps only its SHA-256                                                                              | `apps/api/src/session.ts`                                                                         |
-| Signing out deletes the session row, so a copied cookie stops working                                                                                                                               | `session.ts` (`endSession`); `auth.test.ts`                                                       |
-| Production refuses to start without a SESSION_SECRET of 32+ characters                                                                                                                              | `session.ts` (`sessionSecret`)                                                                    |
-| CSRF: POSTs must be JSON, which a cross-site page cannot send without a CORS preflight, and the API approves none; PATCH always needs one; SameSite=Lax keeps the cookie off cross-site subrequests | `apps/api/src/app.ts` (`jsonOnlyPosts`)                                                           |
-| Sign-in takes any password for the sample people, by the challenge's rules                                                                                                                          | Stated in the README; protected by the rate limit below. A real identity provider is out of scope |
-| The ticket service trusts only tokens signed by the API (ES256, 60-second lifetime, issuer and audience checked); it holds only the public key                                                      | `packages/shared/src/service-token.ts`; `apps/tickets/src/middleware/service-token.ts`            |
+| Check                                                                                                                                                                                                                                                           | Evidence                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| The cookie holds a sealed random id, httpOnly, SameSite=Lax, Secure in production; the database keeps only its SHA-256                                                                                                                                          | `apps/api/src/session.ts`                                                                         |
+| Signing out deletes the session row, so a copied cookie stops working                                                                                                                                                                                           | `session.ts` (`endSession`); `auth.test.ts`                                                       |
+| Production refuses to start without a SESSION_SECRET of 32+ characters                                                                                                                                                                                          | `session.ts` (`sessionSecret`)                                                                    |
+| CSRF: POSTs must be JSON, which a cross-site page cannot send without a CORS preflight, and the API approves none; PATCH always needs one; SameSite=Lax keeps the cookie off cross-site subrequests                                                             | `apps/api/src/app.ts` (`jsonOnlyPosts`)                                                           |
+| Sign-in takes any password for the sample people, by the challenge's rules                                                                                                                                                                                      | Stated in the README; protected by the rate limit below. A real identity provider is out of scope |
+| Every response carries the usual security headers and a content security policy that allows only the app's own origin (`default-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`); the screens work under it with no violation in the browser console | `apps/api/src/app.ts` (`CONTENT_SECURITY_POLICY`); `app.test.ts`. **Closed in Stage 12**          |
+| The ticket service trusts only tokens signed by the API (ES256, 60-second lifetime, issuer and audience checked); it holds only the public key                                                                                                                  | `packages/shared/src/service-token.ts`; `apps/tickets/src/middleware/service-token.ts`            |
 
 ## Secrets
 
@@ -35,6 +36,19 @@ Done on 2026-10-29 in Stage 11 (PRD S-11.10 and S-11.11). Each item says what wa
 | The web app reads no secret: no `process.env` or `import.meta.env` in `apps/web/src`              | Searched on 2026-10-29                               |
 | CI scans the whole history for keys on every push and pull request                                | `.github/workflows/ci.yml`, job `secrets` (gitleaks) |
 | A local search for OpenAI keys (`sk-…`) in the history found none                                 | Searched on 2026-10-29                               |
+
+## The Docker Compose stack
+
+Added in Stage 12 (`docker compose --profile app up --build`).
+
+| Check                                                                                                                                                                       | Evidence                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| The ticket service publishes no port: only the API reaches it, inside the Compose network, and it still checks the signed tokens                                            | `docker-compose.yml` (`tickets`)                                       |
+| The API listens on `127.0.0.1:8080` only, so other machines on the network cannot open it                                                                                   | `docker-compose.yml` (`api`)                                           |
+| The keys and the session secret are created on the first start, never printed, and kept in volumes split by service; the ticket service gets only the public key, read-only | `apps/api/src/scripts/compose-setup.ts`; `docker/*-start.sh`           |
+| No env file, key or local build enters an image                                                                                                                             | `.dockerignore`                                                        |
+| The stack runs with `NODE_ENV=production`: a session secret is required, the cookie is Secure, and the seeds refuse to run except on an empty database at start             | `apps/api/src/session.ts`; `apps/*/src/scripts/seed.ts` (`--if-empty`) |
+| The model key comes only from a root `.env`, which git ignores                                                                                                              | `.gitignore`; `.env.example`                                           |
 
 ## Logs and error messages
 
@@ -76,7 +90,8 @@ The legacy service is sometimes unavailable for a few seconds (N5). The client r
 
 ## Open, with the reason
 
-- **Security headers and a content security policy for the web app.** They belong to how the app is served, which is Stage 12. The API answers JSON only.
+- **Publishing the app.** Deployment is the challenge's bonus (N12) and was not done. What a deployment would rely on is in place: the usage limits, keys outside the code, `TRUST_PROXY` for a proxy's address, and the checks above. A deployment would still need HTTPS, its own secrets store and a review of the provider's network.
+- **Mastra's warning about in-memory storage.** At start, Mastra says it has no storage configured. Nothing depends on it: the agent has no Mastra memory, and conversations, decisions and sessions live in the API's PostgreSQL.
 - **The in-memory rate limit resets on restart and is per instance.** Accepted for one instance; the daily limits, which protect the money, are in the database.
 - **A model can still write a rationale that leaks.** The instructions forbid it and the evals check one case, but a model's text cannot be guaranteed by code. The tools and outcomes beside it come from code.
 - **Any password works.** The challenge's rule for the sample people; a real deployment would need an identity provider.

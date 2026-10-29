@@ -1,5 +1,6 @@
 import { databaseUrl, ticketsConfig } from "./env";
 import { serve } from "@hono/node-server";
+import { modelName } from "@nexo/agent";
 import { createServiceTokenSigner, createTicketsClient } from "@nexo/tickets-client";
 import { createApp } from "./app";
 import { connect } from "./db/connect";
@@ -21,6 +22,9 @@ try {
   process.exit(1);
 }
 
-serve({ fetch: createApp({ db, tickets }).fetch, port }, (info) => {
+serve({ fetch: createApp({ db, tickets, webDist: process.env.WEB_DIST }).fetch, port }, (info) => {
   console.log(`Agent API listening on http://localhost:${info.port}`);
+  // Which model answers, so a run with Docker Compose shows whether the key was picked up.
+  const model = modelName();
+  console.log(`Agent model: ${model === "mock" ? "mock (simulated, no key needed)" : model}`);
 });

@@ -167,6 +167,12 @@ const SAMPLES: Sample[] = [
   },
 ];
 
+// No conversations yet: the first start of the Docker Compose stack seeds only then (stage 12).
+export async function isEmpty(db: Db) {
+  const [row] = await db.select({ id: conversations.id }).from(conversations).limit(1);
+  return !row;
+}
+
 export async function seedConversations(db: Db, now = new Date()) {
   await deleteSampleConversations(db);
   for (const sample of SAMPLES) await writeSample(db, sample, now);

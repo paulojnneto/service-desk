@@ -11,7 +11,7 @@ import {
 import { toHandoffView } from "../conversations/to-ui";
 import type { Db } from "../db/connect";
 import { createTestDb, resetTestDb } from "../db/test-db";
-import { seedConversations } from "./conversations";
+import { isEmpty, seedConversations } from "./conversations";
 
 let db: Db;
 const now = new Date("2026-10-29T13:00:00Z");
@@ -78,5 +78,15 @@ describe("seedConversations", () => {
 
     expect((await findOpenConversation(db, "ana.souza"))?.id).toBe(ana?.id);
     expect((await list("rafael.lima")).counts.todas).toBe(7);
+  });
+});
+
+describe("isEmpty", () => {
+  it("is true before the first seed and false after it", async () => {
+    expect(await isEmpty(db)).toBe(true);
+
+    await seedConversations(db, now);
+
+    expect(await isEmpty(db)).toBe(false);
   });
 });

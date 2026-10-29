@@ -27,6 +27,20 @@ jobs:
       - run: pnpm eval
       - run: pnpm build
 
+  # The one-command run (stage 12 PRD, S-12.9): builds the images, starts the Compose stack
+  # with the simulated model (no .env, so no key) and runs the smoke test against it.
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: docker compose --profile app up -d --build
+      - run: node scripts/smoke.mjs
+      - if: failure()
+        run: docker compose --profile app logs
+
   # Keys never enter the repository (stage 11 PRD, S-11.12): gitleaks scans every commit of
   # the history on each push and pull request.
   secrets:

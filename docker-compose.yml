@@ -1,6 +1,10 @@
-# Local PostgreSQL for development (stage 4 tech spec).
+# Local PostgreSQL for development (stage 4 tech spec), and the whole app with one command
+# (stage 12 tech spec):
+#   pnpm db:up                                 PostgreSQL only, for pnpm dev
+#   docker compose --profile app up --build    everything, on http://localhost:8080
 # Host port 55432, because 5432 and 5433 are often taken by local PostgreSQL installs.
-# The credentials are for local development only.
+# The credentials are for local use only. The app profile uses databases of its own
+# (nexo_app_*), so it never touches the data of pnpm dev.
 services:
   postgres:
     image: postgres:18-alpine
@@ -19,5 +23,66 @@ services:
       timeout: 3s
       retries: 20
 
+  # One-off: creates the app's databases and the keys when missing, then exits.
+  setup:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["./node_modules/.bin/tsx", "src/scripts/compose-setup.ts"]
+    environment:
+      POSTGRES_URL: postgres://nexo:nexo@postgres:5432/postgres
+    volumes:
+      - api-secrets:/secrets/api
+      - tickets-secrets:/secrets/tickets
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # The simulated ticket service. No published port: only the API reaches it.
+  tickets:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/tickets/Dockerfile }
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://nexo:nexo@postgres:5432/nexo_app_tickets
+    volumes:
+      # Only the public key: the private one lives in the API's volume.
+      - tickets-secrets:/secrets:ro
+    depends_on:
+      setup: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
+  # The agent API, serving the built screens. Only this machine can open it.
+  api:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    ports:
+      - "127.0.0.1:8080:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://nexo:nexo@postgres:5432/nexo_app_api
+      TICKETS_URL: http://tickets:4000
+      # From the root .env (see .env.example); without it, the simulated model.
+      NEXO_AGENT_MODEL: ${NEXO_AGENT_MODEL:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      NEXO_AGENT_TURNS_PER_DAY: ${NEXO_AGENT_TURNS_PER_DAY:-40}
+      NEXO_DAILY_BUDGET_USD: ${NEXO_DAILY_BUDGET_USD:-5}
+    volumes:
+      - api-secrets:/secrets:ro
+    depends_on:
+      setup: { condition: service_completed_successfully }
+      tickets: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  api-secrets:
+  tickets-secrets:

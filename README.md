@@ -1,43 +1,33 @@
 # Nexo Assist
 
-Support agent for Nexo's IT service desk (technical challenge).
+Support agent for Nexo's IT service desk, built for a technical challenge. Employees chat with an agent that answers from the help center, looks up their tickets, prepares drafts that become tickets only after they confirm, and hands the conversation to an analyst with a summary. Analysts work in a console where they take conversations over, answer and hand them back. Every reply shows what the agent did and why.
 
-> Current state: **chat cards and flows** (Stage 7). Employees sign in and chat with the agent, which answers from the help center, looks up their tickets, prepares drafts that become tickets only after they confirm, and hands the conversation to an analyst. Tickets, choices and drafts appear as the prototype's cards (Screens 2 and 3). It works with a simulated model (no LLM key needed) or a real one; conversations are stored and resumed another day.
-> Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
+Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
-## How to run
+## Try it
 
-Requirements: Node 22 (see `.nvmrc`), pnpm 10 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL).
+Requirements: Docker with Compose v2. Nothing else.
 
 ```bash
-pnpm install
-pnpm bootstrap     # creates the .env.local files and the service token keys
-pnpm db:up         # starts PostgreSQL in Docker (host port 55432)
-pnpm db:migrate    # creates the tables of both databases
-pnpm db:seed       # loads the Annex B sample tickets and articles
-pnpm dev
+docker compose --profile app up --build
 ```
 
-`pnpm bootstrap` is not `pnpm setup`: that one is a built-in pnpm command that changes your user environment.
-
-`pnpm dev` starts three processes:
-
-| Process        | URL                          | What it is                     |
-| -------------- | ---------------------------- | ------------------------------ |
-| UI             | http://localhost:3000        | The chat (Vite + React)        |
-| Agent API      | http://localhost:3001/health | Backend that runs the agent    |
-| Ticket service | http://localhost:4000/health | Simulated legacy ticket system |
-
-Open http://localhost:3000 and sign in with a sample email and **any password**:
+The first build takes a few minutes. Then open http://localhost:8080 and sign in with a sample email and **any password**:
 
 | Who                   | Email                     | Lands on                                                                                             |
 | --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                                                                                     |
 | Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst console (Screens 4 and 5); Júlia Castro (`julia.castro@nexo.com.br`) is a second analyst |
 
-The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or sign in again later: the conversation, the choices made and the state of each draft are still there.
+The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or come back another day: the conversation, the choices made and the state of each draft are still there.
 
-### Flows to try (simulated mode, as Ana)
+- **The model.** By default the stack uses the simulated model: no key, no cost, the same tools and rules. To use GPT-5.5, copy `.env.example` to `.env`, paste your OpenAI key and start again. The API's log says which model answers.
+- **What starts.** PostgreSQL, the ticket service (not reachable from outside the stack) and the API, which also serves the screens, only on this machine. The first start creates the databases, the keys and the sample data; later starts keep them. It runs in production mode, so the session cookie is `Secure`: Chrome, Edge and Firefox accept it on `http://localhost`.
+- **Check it.** With Node 22, `node scripts/smoke.mjs` (or `pnpm smoke`) checks the running stack: the screens, sign-in, one agent turn and the console.
+- **Stop it** with `docker compose --profile app down`. `down -v` erases the data too, including the development databases, which share the same PostgreSQL.
+- At start, Mastra warns that it has no storage configured. Nothing depends on it: conversations, decisions and sessions live in PostgreSQL.
+
+### Flows to try (simulated model, as Ana)
 
 | Say or pick                                                                                                            | What happens                                                                                                            |
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -55,7 +45,7 @@ The other sample people are in `packages/shared/src/directory.ts`. The line abov
 
 **Keyboard:** Ctrl+Enter (⌘+Enter on macOS) confirms the waiting draft; with the composer empty, the number keys pick the options or tickets of the waiting question; the ticket picker moves with the arrow keys; Esc closes the edit form.
 
-`pnpm db:seed` resets the tickets and writes sample conversations for the console (Carla, Bruno, Diego, Elisa, Fábio and Gabriela, one per state of Screen 4); Ana's conversation is left alone. "Nova conversa" starts the chat again.
+"Nova conversa" starts the chat again. The console's sample conversations (Carla, Bruno, Diego, Elisa, Fábio and Gabriela) show one per state of Screen 4.
 
 ### Both sides at once
 
@@ -68,7 +58,32 @@ The sign-in is a cookie, so use two browser profiles or a normal and a private w
 
 Sign in as Júlia at the same time to see that only the analyst who took a conversation over can answer it.
 
-If your machine uses another Node version globally (for example with nvm-windows), switch before installing: `nvm use 22`.
+## Run for development
+
+Requirements: Node 22 (see `.nvmrc`; with nvm-windows, `nvm use 22`), pnpm 10 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL).
+
+```bash
+pnpm install
+pnpm bootstrap     # creates the .env.local files and the service token keys
+pnpm db:up         # starts PostgreSQL in Docker (host port 55432)
+pnpm db:migrate    # creates the tables of both databases
+pnpm db:seed       # loads the Annex B sample tickets and articles
+pnpm dev
+```
+
+`pnpm bootstrap` is not `pnpm setup`: that one is a built-in pnpm command that changes your user environment.
+
+`pnpm dev` starts three processes; open http://localhost:3000 and sign in with the same sample accounts:
+
+| Process        | URL                          | What it is                     |
+| -------------- | ---------------------------- | ------------------------------ |
+| UI             | http://localhost:3000        | The chat (Vite + React)        |
+| Agent API      | http://localhost:3001/health | Backend that runs the agent    |
+| Ticket service | http://localhost:4000/health | Simulated legacy ticket system |
+
+It uses databases of its own (`nexo_api`, `nexo_tickets`), so it can run beside the Docker stack.
+
+`pnpm db:seed` resets the tickets and writes sample conversations for the console (Carla, Bruno, Diego, Elisa, Fábio and Gabriela, one per state of Screen 4); Ana's conversation is left alone. The Docker stack loads the same data on its first start.
 
 ### Other commands
 
@@ -76,6 +91,7 @@ If your machine uses another Node version globally (for example with nvm-windows
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `pnpm test`      | Runs the tests of every package                                                        |
 | `pnpm eval`      | Scores the agent's decisions (see [How quality was ensured](#how-quality-was-ensured)) |
+| `pnpm smoke`     | Checks a running stack, by default the Docker one on http://localhost:8080             |
 | `pnpm lint`      | Lints every package                                                                    |
 | `pnpm typecheck` | Type-checks every package                                                              |
 | `pnpm build`     | Builds the UI into `apps/web/dist`                                                     |
@@ -95,19 +111,20 @@ apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent
                                   apps/tickets ──▶ PostgreSQL (nexo_tickets)
 ```
 
-| Folder                    | What it is                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `apps/web`                | Client-only UI (Vite + React). In development, Vite forwards `/api` to the API |
-| `apps/api`                | Backend for the UI (Hono): runs the agent, streams and stores the conversation |
-| `apps/tickets`            | Simulated ticket service (Hono), a separate process from the agent             |
-| `packages/agent`          | Mastra agent: instructions, tools, decision record and model selection         |
-| `packages/shared`         | Service desk vocabulary, ticket contracts and business-hours deadlines         |
-| `packages/tickets-client` | Client for the ticket service: signed tokens, retries and typed errors         |
-| `docs`                    | Product PRD, and the PRD and tech spec of each stage                           |
+| Folder                    | What it is                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`                | Client-only UI (Vite + React). In development, Vite forwards `/api` to the API; with Docker, the API serves the build      |
+| `apps/api`                | Backend for the UI (Hono): runs the agent, streams and stores the conversation                                             |
+| `apps/tickets`            | Simulated ticket service (Hono), a separate process from the agent                                                         |
+| `packages/agent`          | Mastra agent: instructions, tools, decision record and model selection                                                     |
+| `packages/shared`         | Service desk vocabulary, ticket contracts and business-hours deadlines                                                     |
+| `packages/tickets-client` | Client for the ticket service: signed tokens, retries and typed errors                                                     |
+| `docker`                  | The Docker stack's start scripts and PostgreSQL's init; the images are `apps/api/Dockerfile` and `apps/tickets/Dockerfile` |
+| `docs`                    | Product PRD, and the PRD and tech spec of each stage                                                                       |
 
-**Secrets live only in `apps/api/.env.local`.** The UI has no environment variables on purpose: Vite publishes every `VITE_*` variable to the browser.
+**Secrets live only on the server:** `apps/api/.env.local` in development, the root `.env` and the stack's volumes with Docker. The UI has no environment variables on purpose: Vite publishes every `VITE_*` variable to the browser.
 
-## Sign-in and sessions
+### Sign-in and sessions
 
 - `POST /api/auth/sign-in` looks the email up in the sample directory (any password works, as the challenge asks) and sets the `nexo_session` cookie: HTTP-only, `SameSite=Lax`, holding only a random session id, sealed (encrypted and signed) with `iron-session`. The `sessions` table in `nexo_api` keeps the SHA-256 of that id with the person, the role and the expiry. It lasts 10 hours, or 7 days with "Manter conectado".
 - **Signing out revokes the session:** the row is deleted, so a copy of the cookie stops working at once. A session also survives an API restart.
@@ -116,7 +133,7 @@ apps/web (browser) ──/api, cookie──▶ apps/api ──▶ packages/agent
 - In the UI, each route asks `GET /api/auth/me` before rendering and sends each person to their own area. This only shapes the screens; the API is what protects the data.
 - `SESSION_SECRET` (32+ characters) seals the cookie. It is required in production; in development a fixed secret is used when it is missing.
 
-## Conversations
+### Conversations
 
 The API stores every conversation in its own database (`nexo_api`), so nothing is lost when the browser closes or the application restarts.
 
@@ -127,7 +144,7 @@ The API stores every conversation in its own database (`nexo_api`), so nothing i
 - **The agent stays quiet** when the conversation is waiting for or with an analyst: the message is saved and the chat shows that the service desk has it. The check is in the chat route, whatever the browser sends.
 - **Privacy:** no employee route takes a conversation id; each one works on the session's own conversation. Only analysts read other conversations, through `/api/analyst`.
 
-## Handoff and the analyst console
+### Handoff and the analyst console
 
 **Handoff.** The agent hands off directly only when the employee asks for a person in words or the case is critical. For an overdue ticket or when it stays unsure, it first offers "Falar com um analista" as an option and hands off only if it is picked. A handoff stores, in one transaction, the new state, the reason, the agent's summary, the related ticket and a note in the chat; the ticket also gets a transfer event when the ticket service is up.
 
@@ -138,6 +155,17 @@ The API stores every conversation in its own database (`nexo_api`), so nothing i
 - **Actions.** Any analyst takes over a waiting conversation, or one still with the agent, which then stops. Only the holder answers. The holder, or anyone while it waits, hands it back or closes it. Each action is one conditional update in the database, so two analysts clicking at once get one winner, and the other sees who took it. Every action leaves a note that both sides see.
 - **Near real time.** Both screens ask the API every 3 seconds, while the tab is visible, for what changed after the last message they have. That is one indexed query, and it needs no connection kept open.
 - **After a hand back,** the agent reads the analyst's messages and the notes, marked as such ("[Analista Rafael Lima] …"), so it does not ask again what the analyst already settled.
+
+### Ticket service
+
+The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`).
+
+- **Only the API can call it.** Every request carries a JWT signed by the API with ES256: the requester is the token's `sub`, with issuer `nexo-api`, audience `nexo-tickets` and 60 seconds of life. The service checks all of it with the public key; it holds no private key, so it cannot create tokens. `pnpm bootstrap` writes the private key only to `apps/api/.env.local` and the public key only to `apps/tickets/.env.local`.
+- **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
+- **Deadlines** (Annex A, R9) are computed in São Paulo business hours (Monday to Friday, 8:00 to 18:00): critical 1 hour, high 4 business hours, medium 3 and low 5 business days, counted from the last update. Resolved tickets are never overdue; they can be reopened for 7 calendar days.
+- **Idempotent writes:** every `POST` needs an `Idempotency-Key`; a repeat replays the first response, so a retry never creates two tickets.
+- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
+- **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
 
 ## How the agent decides
 
@@ -193,6 +221,8 @@ A reply written by the server says so instead of showing a model's confidence; a
 The agent asks a clarifying question when its confidence is low, and offers an analyst if it stays low. Out-of-scope requests (RH, Financeiro, Facilities) go to fixed channels in `@nexo/shared`. Each turn runs at most 6 steps.
 
 ## How quality was ensured
+
+CI runs on every push and pull request: format, lint, type-check, the tests, the evals with the simulated model and the build; a [gitleaks](https://github.com/gitleaks/gitleaks) scan of the whole history; and the Docker stack with `pnpm smoke` against it.
 
 Unit, route and flow tests prove that the rules in code hold: confirmation, privacy, priority, duplicates, reopening, handoff. Whether the agent _decides_ well is measured separately, by evals.
 
@@ -254,20 +284,9 @@ The one failure was an expectation taken from the prototype rather than from Ann
 
 The runs also showed about 4 model calls and 14,000 input tokens per conversation, and an R8 the model sometimes cites for no reason; the decision detail keeps it apart from the rules the code guarantees. Stage 10 reported no cached tokens: that came from reading the wrong field, fixed in Stage 11 (see [Model, cost and limits](#model-cost-and-limits)).
 
-## Ticket service
-
-The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`).
-
-- **Only the API can call it.** Every request carries a JWT signed by the API with ES256: the requester is the token's `sub`, with issuer `nexo-api`, audience `nexo-tickets` and 60 seconds of life. The service checks all of it with the public key; it holds no private key, so it cannot create tokens. `pnpm bootstrap` writes the private key only to `apps/api/.env.local` and the public key only to `apps/tickets/.env.local`.
-- **Privacy:** every query filters by the requester; someone else's ticket answers `404`, like a ticket that does not exist.
-- **Deadlines** (Annex A, R9) are computed in São Paulo business hours (Monday to Friday, 8:00 to 18:00): critical 1 hour, high 4 business hours, medium 3 and low 5 business days, counted from the last update. Resolved tickets are never overdue; they can be reopened for 7 calendar days.
-- **Idempotent writes:** every `POST` needs an `Idempotency-Key`; a repeat replays the first response, so a retry never creates two tickets.
-- **Legacy behavior:** requests may take up to 600 ms, and 2 % of them start a 3-second outage in which everything answers `503`. Tune or turn it off with `LEGACY_LATENCY_MS`, `LEGACY_OUTAGE_RATE` and `LEGACY_OUTAGE_SECONDS` in `apps/tickets/.env.local`. The client retries up to 5 times (waits of 0.25, 0.5, 1 and 2 s), which covers an outage.
-- **Tests need no Docker:** they run the same migrations on PGlite, an in-process PostgreSQL.
-
 ## Model, cost and limits
 
-The model is set by `NEXO_AGENT_MODEL` in `apps/api/.env.local`:
+The model is set by `NEXO_AGENT_MODEL`, in the root `.env` for Docker or in `apps/api/.env.local` for `pnpm dev`:
 
 - `mock` or empty (default): the simulated model in `packages/agent/src/models`. A script follows the prototype's flows and decides which tools to call, and Mastra runs the real tools, so drafts, priority and duplicate checks are real. It is used to build the screens and to run the tests with no key and no cost.
 - `openai/gpt-5.5` with `OPENAI_API_KEY`: **the chosen model**. Any other Mastra model router ID works with its provider's key.
@@ -299,7 +318,7 @@ Each reply stores its model, calls, tokens, duration and estimated cost with its
 - **A lean history.** In older replies, the tool outputs (ticket lists, article bodies) become one line with each tool and its result; the last reply goes whole.
 - **Bounded turns.** At most 6 model calls and 60 seconds per turn, with one retry of a rate limit or a provider error.
 
-**Limits**, all in `apps/api/.env.local`. A value of 0 turns a limit off:
+**Limits**, in the same files. A value of 0 turns a limit off:
 
 | Variable                   | Default                                   | What happens past it                                                                                                                   |
 | -------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -309,12 +328,40 @@ Each reply stores its model, calls, tokens, duration and estimated cost with its
 
 At these defaults, one employee costs at most about US$ 0.92 a day, and US$ 5 covers about 150 typical conversations a day for everyone.
 
-**Security and privacy** were reviewed item by item in [docs/security.md](docs/security.md), with the evidence for each check and what stays open.
+## Security
 
-## Prototype
+Reviewed item by item in [docs/security.md](docs/security.md), with the evidence for each check and what stays open. In short:
+
+- the person always comes from the session, and the ticket service checks a signed token on every request (R7);
+- only the employee's "Confirmar" writes a ticket, so a prompt injection cannot (R3);
+- keys stay on the server, and CI scans the whole history for them;
+- logs and error messages carry no personal data or provider messages;
+- every response sends security headers and a content security policy that allows only the app's own origin;
+- usage limits per employee and per day cap the model's cost.
+
+## Trade-offs
+
+| Choice                                            | Why it was accepted                                                                           | What it costs                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Rules enforced in code, not only in the prompt    | Confirmation, privacy, priority, duplicates and reopening must hold whatever the model writes | More code than a prompt-only agent; the model can only prepare drafts                        |
+| Evals with exact checks, no LLM judge             | Annex A is about what was done, which can be read from the decision record and the database   | They do not grade the wording of a reply                                                     |
+| GPT-5.5 over GPT-5.4 mini                         | It passed every scenario; mini failed three handoff cases                                     | About ten times the cost and twice the time per turn                                         |
+| Polling every 3 seconds instead of a push channel | One indexed query, no connection kept open, works behind any proxy                            | Up to 3 seconds of delay, and requests while nothing changes (only while the tab is visible) |
+| Rate limit in memory                              | One instance; the daily limits, which protect the money, are in the database                  | It resets on restart and would not be shared by several instances                            |
+| Any password for the sample people                | The challenge's rule                                                                          | A real deployment needs an identity provider                                                 |
+| `tsx` at runtime in the images                    | The same command as `pnpm start`, with no compile step to keep in sync                        | Bigger images and a slower start than compiled JavaScript                                    |
+| One instance of each service                      | Enough for the challenge, and it keeps migrating at start safe                                | No zero-downtime deploys or scaling                                                          |
+
+## With more time
+
+- **Publish it.** Deployment is the challenge's bonus and was not done. What it relies on is in place: the usage limits, keys outside the code, `TRUST_PROXY`, the security headers and the images. It would still need HTTPS, a secrets store and an identity provider.
+- **Another model through the same evals.** The OpenAI pricing page lists a newer gpt-6 family at a fraction of GPT-5.5's price. `pnpm eval --model <id> --repeat 3` would show whether it passes every scenario.
+- **More eval scenarios and repeated runs,** so a decision rests on a pass rate rather than on one run.
+- **A push channel** (server-sent events) for both screens, if the 3-second delay matters.
+- **Compiled, smaller images,** and a shared rate limit for more than one instance.
+
+## How we worked
+
+Each stage of the [roadmap](docs/prd.md#9-stage-roadmap) has a GitHub issue, a PRD and a tech spec in `docs/stages/`, and is delivered through a pull request that closes its issue. The tech specs record the deviations found while building.
 
 The prototype from the hiring process (`nexo.pen` and screenshots) is not versioned, because this repository is public. To use it locally, put the files in `docs/prototype/`, which is git-ignored. The colors and fonts derived from it live in `apps/web/src/index.css`.
-
-## How we work
-
-Each stage of the [roadmap](docs/prd.md#9-stage-roadmap) has a GitHub issue, a PRD and a tech spec in `docs/stages/`, and is delivered through a pull request that closes its issue.

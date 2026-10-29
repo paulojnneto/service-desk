@@ -1,5 +1,7 @@
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
+import { secureHeaders } from "hono/secure-headers";
 import { session, type AppEnv } from "./auth";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { Db } from "./db/connect";
@@ -24,6 +26,9 @@ export type AppOptions = {
   turnDeadlineMs?: number;
   // Per-address limits on sign-in and chat; false turns them off (tests sign in many times).
   rateLimits?: RateLimits | false;
+  // The built web app (apps/web/dist), served on the API's origin when set (stage 12 PRD,
+  // S-12.2). Docker Compose sets it; in development Vite serves the screens.
+  webDist?: string;
 };
 
 // Backend for the UI: runs the agent, so model keys never reach the browser.
@@ -36,9 +41,11 @@ export function createApp({
   limits = readLimits(),
   turnDeadlineMs = 60_000,
   rateLimits = DEFAULT_RATE_LIMITS,
+  webDist,
 }: AppOptions) {
   const app = new Hono<AppEnv>();
 
+  app.use(securityHeaders);
   app.get("/health", (c) => c.json({ status: "ok" }));
 
   app.use("/api/*", async (c, next) => {
@@ -61,8 +68,34 @@ export function createApp({
   app.route("/api/drafts", draftRoutes);
   app.route("/api/analyst", analystRoutes);
 
+  if (webDist) {
+    // An unknown API path stays a JSON 404, not the page.
+    app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
+    app.get("*", serveStatic({ root: webDist }));
+    // Every other path is a screen of the router: index.html decides what to show.
+    app.get("*", serveStatic({ root: webDist, path: "index.html" }));
+  }
+
   return app;
 }
+
+// The usual security headers on every response, and a content security policy that allows
+// only the app's own origin (stage 12 PRD, S-12.8). The fonts are bundled by Vite, and data:
+// covers the small assets it inlines; React's style prop goes through the DOM, which
+// style-src 'self' allows.
+export const CONTENT_SECURITY_POLICY = {
+  defaultSrc: ["'self'"],
+  scriptSrc: ["'self'"],
+  styleSrc: ["'self'"],
+  imgSrc: ["'self'", "data:"],
+  fontSrc: ["'self'", "data:"],
+  connectSrc: ["'self'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  frameAncestors: ["'none'"],
+  formAction: ["'self'"],
+};
+const securityHeaders = secureHeaders({ contentSecurityPolicy: CONTENT_SECURITY_POLICY });
 
 // CSRF protection together with SameSite=Lax: a cross-site page cannot send a JSON
 // body without a CORS preflight, and this API never approves one.
