@@ -120,6 +120,16 @@ describe("POST /api/conversations/current/close", () => {
     expect(fresh?.employeeMessages).toBe(1);
   });
 
+  it("closes a conversation an analyst is answering", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    await say(cookie, "m1", "Quero falar com um analista");
+    await setConversationState(db, "ana.souza", "with_analyst", new Date(), "rafael.lima");
+
+    const res = await postJson(app, "/api/conversations/current/close", {}, cookie);
+    expect(res.status).toBe(204);
+    expect((await current(cookie)).body).toEqual({ conversation: null });
+  });
+
   it("is a no-op without an open conversation", async () => {
     const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
     const res = await postJson(app, "/api/conversations/current/close", {}, cookie);

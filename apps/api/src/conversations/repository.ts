@@ -204,11 +204,12 @@ export async function lastMessage(db: Db, conversationId: string): Promise<Messa
   return row ?? null;
 }
 
-// "Nova conversa" (S-05.11). Closing when nothing is open is not an error.
+// "Nova conversa" (S-05.11). Closing when nothing is open is not an error. A conversation
+// with an analyst lets go of its holder too, as the analyst's close does.
 export async function closeOpenConversation(db: Db, employeeId: string, now: Date) {
   await db
     .update(conversations)
-    .set({ state: "closed", closedAt: now, updatedAt: now })
+    .set({ state: "closed", holderId: null, heldSince: null, closedAt: now, updatedAt: now })
     .where(and(eq(conversations.employeeId, employeeId), isOpen));
 }
 
