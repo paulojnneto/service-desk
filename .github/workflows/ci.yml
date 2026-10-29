@@ -22,4 +22,7 @@ jobs:
       - run: pnpm typecheck
       # No model is configured, so the agent tests use the simulated model.
       - run: pnpm test
+      # The reference conversations with the simulated model: a broken rule, tool or scenario
+      # fails here. Real-model runs are manual (docs/evals).
+      - run: pnpm eval
       - run: pnpm build
