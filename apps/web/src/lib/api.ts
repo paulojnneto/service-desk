@@ -1,4 +1,5 @@
 import type {
+  ConversationUpdates,
   ConversationView,
   DraftView,
   EditDraftInput,
@@ -36,6 +37,16 @@ export async function fetchCurrentConversation(): Promise<ConversationView | nul
   if (res.status === 401) throw new SignedOutError();
   if (!res.ok) throw new ApiUnavailableError();
   return ((await res.json()) as { conversation: ConversationView | null }).conversation;
+}
+
+// What changed in the employee's latest conversation after a message (stage 9 PRD, decision
+// 1); null before the first conversation.
+export async function fetchConversationUpdates(after: number): Promise<ConversationUpdates | null> {
+  const res = await request(`/api/conversations/current/updates?after=${after}`);
+  if (res.status === 401) throw new SignedOutError();
+  if (!res.ok) throw new ApiUnavailableError();
+  const body = (await res.json()) as ConversationUpdates | { conversation: null };
+  return "state" in body ? body : null;
 }
 
 // "Nova conversa": closes the open conversation.

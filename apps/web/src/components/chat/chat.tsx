@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
-import { ArrowUp, Headset, LoaderCircle, RotateCcw } from "lucide-react";
+import { ArrowUp, CircleCheck, Headset, LoaderCircle, RotateCcw } from "lucide-react";
 import {
   MESSAGES_PER_SESSION,
   type ConversationState,
+  type Holder,
   type ConversationView,
   type DraftView,
   type EditDraftInput,
@@ -20,7 +21,14 @@ import {
   SystemNote,
   UserMessage,
 } from "./messages";
-import { decideDraft, editDraft, fetchCurrentConversation } from "../../lib/api";
+import {
+  decideDraft,
+  editDraft,
+  fetchConversationUpdates,
+  fetchCurrentConversation,
+} from "../../lib/api";
+import { highestSeq, mergeUpdates } from "../../lib/updates";
+import { useConversationUpdates } from "../../lib/use-conversation-updates";
 import type { DraftActions } from "./cards/draft-card";
 import { NewConversation } from "./new-conversation";
 import { choiceTexts, draftsIn, waitingQuestion } from "./parts";
@@ -45,6 +53,8 @@ export function Chat({
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<ConversationState>(conversation?.state ?? "with_agent");
+  // The analyst holding the conversation, shown in the banner (stage 9 PRD, S-09.12).
+  const [holder, setHolder] = useState<Holder | null>(conversation?.holder ?? null);
   // Every draft in its current state, from the server (stage 7 PRD, S-07.7).
   const [draftsById, setDraftsById] = useState<Record<string, DraftView>>(() =>
     byId(conversation?.drafts ?? []),
@@ -111,6 +121,22 @@ export function Chat({
   const limitReached =
     sent >= MESSAGES_PER_SESSION || Boolean(error?.message.includes("message_limit_reached"));
   const withServiceDesk = state === "waiting_analyst" || state === "with_analyst";
+  const closed = state === "closed";
+
+  // An analyst's replies, the system notes and state changes arrive by polling, whatever the
+  // state, since an analyst can also take over from the agent (stage 9 tech spec).
+  useConversationUpdates(
+    async () => {
+      const updates = await fetchConversationUpdates(highestSeq(messages));
+      if (!updates || updates.conversationId !== conversation?.id) return;
+      setState(updates.state);
+      setHolder(updates.holder);
+      if (updates.messages.length > 0) {
+        setMessages((all) => mergeUpdates(all, updates.messages));
+      }
+    },
+    Boolean(conversation) && !busy && !closed,
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -185,7 +211,7 @@ export function Chat({
     current,
     busyId: busyDraftId,
     error: draftError,
-    disabled: busy || withServiceDesk,
+    disabled: busy || withServiceDesk || closed,
     confirm: (id) => void decide(id, "confirm"),
     cancel: (id) => void decide(id, "cancel"),
     save,
@@ -193,7 +219,7 @@ export function Chat({
 
   function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy || limitReached) return;
+    if (!trimmed || busy || limitReached || closed) return;
     sendMessage({ text: trimmed });
     setInput("");
   }
@@ -209,13 +235,13 @@ export function Chat({
     choices: question ? choiceTexts(question) : null,
     composerEmpty: input.trim() === "",
     pick: send,
-    enabled: !busy && !limitReached && !withServiceDesk,
+    enabled: !busy && !limitReached && !withServiceDesk && !closed,
   });
 
   // Picking a ticket or an option is the employee's message (stage 7 PRD, S-07.2, S-07.3).
   const cards: CardContext = {
     messages,
-    busy: busy || limitReached || withServiceDesk,
+    busy: busy || limitReached || withServiceDesk || closed,
     replying: busy,
     onPick: send,
     drafts,
@@ -240,7 +266,10 @@ export function Chat({
               </span>
             </StatusLine>
           )}
-          {withServiceDesk && <ServiceDeskBanner />}
+          {withServiceDesk && (
+            <ServiceDeskBanner holder={state === "with_analyst" ? holder : null} />
+          )}
+          {closed && <ClosedBanner onRestart={() => void revalidator.revalidate()} />}
           {error && !limitReached && (
             <ChatError
               error={error}
@@ -267,14 +296,20 @@ export function Chat({
             id="chat-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={limitReached ? "Limite de mensagens atingido" : "Escreva para o Nexo…"}
-            disabled={limitReached}
+            placeholder={
+              closed
+                ? "Atendimento encerrado"
+                : limitReached
+                  ? "Limite de mensagens atingido"
+                  : "Escreva para o Nexo…"
+            }
+            disabled={limitReached || closed}
             autoComplete="off"
             className="h-full min-w-0 flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={busy || limitReached || !input.trim()}
+            disabled={busy || limitReached || closed || !input.trim()}
             className="flex h-9 items-center gap-1.5 rounded-md bg-cta px-3 text-[13.5px] font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
           >
             <ArrowUp className="size-3.5" aria-hidden="true" /> Enviar
@@ -324,8 +359,9 @@ function Welcome({
   );
 }
 
-// The agent is paused while the conversation is with the service desk (S-05.12).
-function ServiceDeskBanner() {
+// The agent is paused while the conversation is with the service desk (S-05.12); once an
+// analyst takes over, the banner says who (stage 9 PRD, S-09.12).
+function ServiceDeskBanner({ holder }: { holder: Holder | null }) {
   return (
     <div
       role="status"
@@ -333,9 +369,28 @@ function ServiceDeskBanner() {
     >
       <Headset className="size-4 shrink-0" aria-hidden="true" />
       <span>
-        Sua conversa está com a equipe de atendimento. Um analista responde por aqui; suas mensagens
-        já foram enviadas.
+        {holder
+          ? `${holder.name} (${holder.level}) está atendendo você por aqui.`
+          : "Sua conversa está com a equipe de atendimento. Um analista responde por aqui; suas mensagens já foram enviadas."}
       </span>
+    </div>
+  );
+}
+
+// An analyst closed the conversation (stage 9 PRD, S-09.9): the next one starts empty.
+function ClosedBanner({ onRestart }: { onRestart: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-success-soft px-4 py-3 text-[13.5px] text-success-text"
+    >
+      <span className="flex items-center gap-2.5">
+        <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
+        Atendimento encerrado.
+      </span>
+      <button type="button" onClick={onRestart} className="font-semibold hover:underline">
+        Começar nova conversa
+      </button>
     </div>
   );
 }

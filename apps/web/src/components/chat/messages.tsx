@@ -71,7 +71,10 @@ export function AgentMessage({ message, context }: { message: UIMessage; context
 
   return (
     <div className="flex flex-col gap-1.5">
-      <StatusLine name={name}>
+      <StatusLine
+        name={name}
+        level={metadata?.author === "analyst" ? metadata.authorLevel : undefined}
+      >
         {labels.map((label) => (
           <span key={label.key} className="flex items-center gap-[5px] text-ink-3">
             {label.done ? (
@@ -186,13 +189,21 @@ export function SystemNote({ message }: { message: UIMessage }) {
 export function StatusLine({
   children,
   name = "Nexo Assist",
+  level,
 }: {
   children?: React.ReactNode;
   name?: string;
+  // An analyst's level, "Suporte N2", as in Screen 5 (stage 9 PRD, decision 12).
+  level?: string;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
       <span className="font-semibold text-ink">{name}</span>
+      {level && (
+        <span className="rounded bg-success-soft px-1.5 py-px text-[11.5px] font-medium text-success-text">
+          {level}
+        </span>
+      )}
       {children}
     </div>
   );

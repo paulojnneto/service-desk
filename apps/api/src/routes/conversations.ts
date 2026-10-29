@@ -52,6 +52,7 @@ export const conversationRoutes = new Hono<AppEnv>()
         "system",
       ]);
       const updates: ConversationUpdates = {
+        conversationId: latest.id,
         state: latest.state as ConversationUpdates["state"],
         holder: holderFor(latest.holderId),
         messages: rows.map((row) => toStoredMessage(row)),

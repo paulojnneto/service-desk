@@ -90,6 +90,7 @@ export const analystRoutes = new Hono<AppEnv>()
         listHandoffs(db, row.id),
       ]);
       return c.json({
+        conversationId: row.id,
         state: row.state,
         holder: holderFor(row.holderId),
         messages: rows.map((message) => toStoredMessage(message)),

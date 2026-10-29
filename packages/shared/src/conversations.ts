@@ -60,6 +60,8 @@ export type ConversationView = {
 // What changed since the last poll (stage 9 PRD, decision 1). For the employee, only the
 // analysts' and the system's messages; the console gets every message.
 export type ConversationUpdates = {
+  // The conversation they belong to: after a close, the employee's next one is another.
+  conversationId: string;
   state: ConversationState;
   holder: Holder | null;
   messages: StoredMessage[];
