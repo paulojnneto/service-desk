@@ -118,7 +118,7 @@ const ticketStatus: Flow = (turn) => {
       decision(
         "status_chamado",
         "alta",
-        `A pessoa pediu o status do ${number}; consultei o chamado e o prazo.`,
+        `A pessoa pediu o status do ${number}; consultei o chamado.`,
         ["R7", "R9"],
       ),
     );
