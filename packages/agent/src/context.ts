@@ -1,11 +1,12 @@
 import { RequestContext } from "@mastra/core/request-context";
-import type {
-  Article,
-  Confidence,
-  CreateDraftFields,
-  DraftDuplicate,
-  DraftView,
-  Ticket,
+import {
+  HandoffReason,
+  type Article,
+  type Confidence,
+  type CreateDraftFields,
+  type DraftDuplicate,
+  type DraftView,
+  type Ticket,
 } from "@nexo/shared";
 
 // What the agent's tools can do, built by the API for one person and one conversation
@@ -33,12 +34,8 @@ export type DraftInput =
   | { kind: "update"; ticketNumber: string; fields: { message: string } }
   | { kind: "reopen"; ticketNumber: string; fields: { reason: string } };
 
-export const HANDOFF_TRIGGERS = [
-  "pedido_do_funcionario",
-  "caso_critico",
-  "chamado_vencido",
-  "baixa_confianca",
-] as const;
+// The reasons are shared with the console, which shows them (stage 9).
+export const HANDOFF_TRIGGERS = HandoffReason.options;
 export type HandoffTrigger = (typeof HANDOFF_TRIGGERS)[number];
 export type HandoffInput = { trigger: HandoffTrigger; summary: string; ticketNumber?: string };
 

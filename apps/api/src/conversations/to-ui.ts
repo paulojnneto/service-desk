@@ -1,4 +1,5 @@
 import {
+  analystLevelLabel,
   findPersonById,
   MESSAGES_PER_SESSION,
   type ConversationState,
@@ -12,7 +13,9 @@ import type { ConversationRow, DecisionRow, MessageRow } from "./repository";
 // Stored rows in the AI SDK UIMessage shape the UI renders (stage 5 tech spec).
 
 export function toStoredMessage(row: MessageRow, decision?: DecisionRow): StoredMessage {
-  const authorName = row.authorId ? findPersonById(row.authorId)?.name : undefined;
+  const author = row.authorId ? findPersonById(row.authorId) : undefined;
+  const authorName = author?.name;
+  const authorLevel = author?.role === "analyst" ? analystLevelLabel(author.level) : undefined;
   return {
     id: row.id,
     role: row.author === "employee" ? "user" : "assistant",
@@ -20,7 +23,9 @@ export function toStoredMessage(row: MessageRow, decision?: DecisionRow): Stored
     metadata: {
       author: row.author as StoredMessage["metadata"]["author"],
       ...(authorName ? { authorName } : {}),
+      ...(authorLevel ? { authorLevel } : {}),
       createdAt: row.createdAt.toISOString(),
+      seq: row.seq,
       ...(decision ? { decision: toDecisionRecord(decision) } : {}),
     },
   };
@@ -51,6 +56,8 @@ export function toConversationView(
   return {
     id: conversation.id,
     state: conversation.state as ConversationState,
+    // Who holds it comes with the handoff columns (stage 9 tech spec, next commit).
+    holder: null,
     employeeMessages: conversation.employeeMessages,
     limit: MESSAGES_PER_SESSION,
     startedAt: conversation.startedAt.toISOString(),

@@ -20,7 +20,12 @@ export type MessageAuthor = z.infer<typeof MessageAuthor>;
 export const MessageMetadata = z.object({
   author: MessageAuthor,
   authorName: z.string().optional(),
+  // An analyst's level, "Suporte N2" (stage 9 PRD, decision 12).
+  authorLevel: z.string().optional(),
   createdAt: z.string(),
+  // The stored order, the cursor of the updates (stage 9 tech spec). Absent on a reply
+  // still streaming.
+  seq: z.number().optional(),
   // Agent replies only (stage 6 PRD, S-06.13).
   decision: DecisionRecord.optional(),
 });
@@ -35,9 +40,13 @@ export type StoredMessage = {
   metadata: MessageMetadata;
 };
 
+// The analyst holding a conversation (stage 9 tech spec).
+export type Holder = { id: string; name: string; level: string };
+
 export type ConversationView = {
   id: string;
   state: ConversationState;
+  holder: Holder | null;
   employeeMessages: number;
   limit: number;
   startedAt: string;
@@ -45,6 +54,14 @@ export type ConversationView = {
   pendingDraftId: string | null;
   // Every draft of the conversation in its current state, oldest first (stage 7 PRD, S-07.7).
   drafts: DraftView[];
+  messages: StoredMessage[];
+};
+
+// What changed since the last poll (stage 9 PRD, decision 1). For the employee, only the
+// analysts' and the system's messages; the console gets every message.
+export type ConversationUpdates = {
+  state: ConversationState;
+  holder: Holder | null;
   messages: StoredMessage[];
 };
 
