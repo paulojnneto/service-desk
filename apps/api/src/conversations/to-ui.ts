@@ -7,9 +7,11 @@ import {
   type ConversationView,
   type DecisionRecord,
   type DraftView,
+  type HandoffReason,
+  type HandoffView,
   type StoredMessage,
 } from "@nexo/shared";
-import type { ConversationRow, DecisionRow, MessageRow } from "./repository";
+import type { ConversationRow, DecisionRow, HandoffRow, MessageRow } from "./repository";
 
 // Stored rows in the AI SDK UIMessage shape the UI renders (stage 5 tech spec).
 
@@ -43,6 +45,15 @@ function toDecisionRecord(row: DecisionRow): DecisionRecord {
     tools: row.tools as DecisionRecord["tools"],
     source: row.source as DecisionRecord["source"],
     registered: row.registered,
+  };
+}
+
+export function toHandoffView(row: HandoffRow): HandoffView {
+  return {
+    reason: row.reason as HandoffReason,
+    summary: row.summary,
+    ticketNumber: row.ticketNumber,
+    at: row.createdAt.toISOString(),
   };
 }
 

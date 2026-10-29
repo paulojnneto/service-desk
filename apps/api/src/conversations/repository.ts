@@ -2,10 +2,11 @@ import {
   MESSAGES_PER_SESSION,
   type ConversationState,
   type DecisionRecord,
+  findPersonById,
   type HandoffReason,
   type MessageAuthor,
 } from "@nexo/shared";
-import { and, asc, desc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/connect";
 import { conversations, decisions, handoffs, messages } from "../db/schema";
 
@@ -244,4 +245,135 @@ export async function listHandoffs(db: Db, conversationId: string): Promise<Hand
     .from(handoffs)
     .where(eq(handoffs.conversationId, conversationId))
     .orderBy(asc(handoffs.createdAt));
+}
+
+// --- Console actions (stage 9 PRD, S-09.7 to S-09.9) ----------------------------------------
+// Each one is a single conditional UPDATE, so two analysts acting at once get one winner, and
+// leaves a system note. "refused" carries the conversation as it is now, or null if unknown.
+
+export type ConsoleActionResult =
+  | { status: "done"; conversation: ConversationRow }
+  | { status: "refused"; conversation: ConversationRow | null };
+
+async function act(
+  db: Db,
+  conversationId: string,
+  allowed: SQL | undefined,
+  set: Partial<typeof conversations.$inferInsert>,
+  note: string,
+  now: Date,
+): Promise<ConsoleActionResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(conversations)
+      .set({ ...set, updatedAt: now })
+      .where(and(eq(conversations.id, conversationId), allowed))
+      .returning();
+    if (!row) {
+      const [current] = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      return { status: "refused", conversation: current ?? null };
+    }
+    await tx
+      .insert(messages)
+      .values({ conversationId, author: "system", parts: noteParts(note), createdAt: now });
+    return { status: "done", conversation: row };
+  });
+}
+
+const analystName = (analystId: string) => findPersonById(analystId)?.name ?? "Um analista";
+
+// Held by this analyst, or waiting for anyone (decision 3).
+const heldByOrWaiting = (analystId: string) =>
+  or(
+    and(eq(conversations.state, "with_analyst"), eq(conversations.holderId, analystId)),
+    eq(conversations.state, "waiting_analyst"),
+  );
+
+// From waiting, or straight from the agent (decision 4). The agent stays paused.
+export function takeOver(db: Db, conversationId: string, analystId: string, now: Date) {
+  return act(
+    db,
+    conversationId,
+    inArray(conversations.state, ["waiting_analyst", "with_agent"]),
+    { state: "with_analyst", holderId: analystId, heldSince: now },
+    `${analystName(analystId)} assumiu o atendimento.`,
+    now,
+  );
+}
+
+export function handBack(db: Db, conversationId: string, analystId: string, now: Date) {
+  return act(
+    db,
+    conversationId,
+    heldByOrWaiting(analystId),
+    { state: "with_agent", holderId: null, heldSince: null },
+    "Conversa devolvida ao Nexo Assist.",
+    now,
+  );
+}
+
+export function closeByAnalyst(db: Db, conversationId: string, analystId: string, now: Date) {
+  return act(
+    db,
+    conversationId,
+    heldByOrWaiting(analystId),
+    { state: "closed", holderId: null, heldSince: null, closedAt: now },
+    "Atendimento encerrado.",
+    now,
+  );
+}
+
+// The holder's reply (S-09.8). It does not count toward the employee's limit, and a resend
+// with the same client id returns the message already saved.
+export async function appendAnalystMessage(
+  db: Db,
+  conversationId: string,
+  analystId: string,
+  message: { clientId: string; text: string },
+  now: Date,
+): Promise<
+  { status: "saved"; message: MessageRow } | (ConsoleActionResult & { status: "refused" })
+> {
+  return db.transaction(async (tx) => {
+    const [held] = await tx
+      .update(conversations)
+      .set({ updatedAt: now })
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.state, "with_analyst"),
+          eq(conversations.holderId, analystId),
+        ),
+      )
+      .returning({ id: conversations.id });
+    if (!held) {
+      const [current] = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      return { status: "refused", conversation: current ?? null };
+    }
+    const [existing] = await tx
+      .select()
+      .from(messages)
+      .where(
+        and(eq(messages.conversationId, conversationId), eq(messages.clientId, message.clientId)),
+      );
+    if (existing) return { status: "saved", message: existing };
+    const [row] = await tx
+      .insert(messages)
+      .values({
+        conversationId,
+        author: "analyst",
+        authorId: analystId,
+        clientId: message.clientId,
+        parts: [{ type: "text", text: message.text }],
+        createdAt: now,
+      })
+      .returning();
+    return { status: "saved", message: row! };
+  });
 }
