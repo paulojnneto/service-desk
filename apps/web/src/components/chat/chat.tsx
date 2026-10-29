@@ -9,6 +9,7 @@ import {
   type Holder,
   type ConversationView,
   type DraftView,
+  type LastClosed,
   type EditDraftInput,
   type MessageMetadata,
 } from "@nexo/shared";
@@ -27,6 +28,7 @@ import {
   fetchConversationUpdates,
   fetchCurrentConversation,
 } from "../../lib/api";
+import { formatDayTime } from "../../lib/format";
 import { highestSeq, mergeUpdates } from "../../lib/updates";
 import { useConversationUpdates } from "../../lib/use-conversation-updates";
 import type { DraftActions } from "./cards/draft-card";
@@ -47,9 +49,11 @@ type StatePart = { state: ConversationState };
 export function Chat({
   firstName,
   conversation,
+  lastClosed = null,
 }: {
   firstName: string;
   conversation: ConversationView | null;
+  lastClosed?: LastClosed | null;
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<ConversationState>(conversation?.state ?? "with_agent");
@@ -251,6 +255,7 @@ export function Chat({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col justify-end gap-5 px-4 pt-7 pb-1 sm:px-10">
+          {messages.length === 0 && lastClosed && <LastClosedNote lastClosed={lastClosed} />}
           {messages.length === 0 && <Welcome firstName={firstName} onPick={send} disabled={busy} />}
           {messages.map((message) => {
             if (message.role === "user") return <UserMessage key={message.id} message={message} />;
@@ -373,6 +378,19 @@ function ServiceDeskBanner({ holder }: { holder: Holder | null }) {
           ? `${holder.name} (${holder.level}) está atendendo você por aqui.`
           : "Sua conversa está com a equipe de atendimento. Um analista responde por aqui; suas mensagens já foram enviadas."}
       </span>
+    </div>
+  );
+}
+
+// Coming back after an analyst closed the last conversation: the new chat says so.
+function LastClosedNote({ lastClosed }: { lastClosed: LastClosed }) {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2.5 rounded-xl bg-success-soft px-4 py-3 text-[13.5px] text-success-text"
+    >
+      <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
+      Seu último atendimento foi encerrado por {lastClosed.by} em {formatDayTime(lastClosed.at)}.
     </div>
   );
 }

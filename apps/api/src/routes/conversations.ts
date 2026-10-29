@@ -5,6 +5,7 @@ import {
   closeOpenConversation,
   findLatestConversation,
   findOpenConversation,
+  lastClosedByAnalyst,
   listDecisions,
   listMessages,
   messagesAfter,
@@ -19,12 +20,16 @@ import { logError } from "../log";
 // (stage 5 PRD, S-05.13).
 export const conversationRoutes = new Hono<AppEnv>()
   .use(requireRole("employee"))
-  // Resuming the chat (S-05.5): the full history in order, or null for an empty chat.
+  // Resuming the chat (S-05.5): the full history in order, or null for an empty chat, with
+  // the last conversation when an analyst closed it.
   .get("/current", async (c) => {
     const db = c.get("db");
     try {
       const open = await findOpenConversation(db, c.get("person")!.id);
-      if (!open) return c.json({ conversation: null });
+      if (!open) {
+        const lastClosed = await lastClosedByAnalyst(db, c.get("person")!.id);
+        return c.json({ conversation: null, lastClosed });
+      }
       const [rows, decisions, draft, drafts] = await Promise.all([
         listMessages(db, open.id),
         listDecisions(db, open.id),

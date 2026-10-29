@@ -20,6 +20,7 @@ function conversation(
     startedAt: at,
     updatedAt: at,
     closedAt: null,
+    closedBy: null,
     ...extra,
   };
 }

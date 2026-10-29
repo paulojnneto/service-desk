@@ -7,7 +7,7 @@ import type { supportLoader } from "./support-data";
 
 export function SupportPage() {
   const user = useEmployee();
-  const { conversation } = useLoaderData<typeof supportLoader>();
+  const { conversation, lastClosed } = useLoaderData<typeof supportLoader>();
   return (
     <>
       <title>Atendimento · Nexo Assist</title>
@@ -20,6 +20,7 @@ export function SupportPage() {
         key={conversation?.id ?? "new"}
         firstName={user.firstName}
         conversation={conversation}
+        lastClosed={lastClosed}
       />
     </>
   );

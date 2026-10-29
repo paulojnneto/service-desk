@@ -1,12 +1,15 @@
-import type { ConversationView } from "@nexo/shared";
+import type { ConversationView, LastClosed } from "@nexo/shared";
 import { redirect } from "react-router";
-import { closeConversation, fetchCurrentConversation, SignedOutError } from "../../lib/api";
+import { closeConversation, fetchCurrentChat, SignedOutError } from "../../lib/api";
 
 // The open conversation is loaded before the screen renders, so the stored history
 // appears at once instead of an empty chat first (stage 5 tech spec).
-export async function supportLoader(): Promise<{ conversation: ConversationView | null }> {
+export async function supportLoader(): Promise<{
+  conversation: ConversationView | null;
+  lastClosed: LastClosed | null;
+}> {
   try {
-    return { conversation: await fetchCurrentConversation() };
+    return await fetchCurrentChat();
   } catch (error) {
     if (error instanceof SignedOutError) throw redirect("/login");
     throw error;

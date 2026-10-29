@@ -59,7 +59,7 @@ describe("GET /api/conversations/current", () => {
     const { res, body } = await current(cookie);
 
     expect(res.status).toBe(200);
-    expect(body).toEqual({ conversation: null });
+    expect(body).toEqual({ conversation: null, lastClosed: null });
   });
 
   it("returns the whole history in order, with authors, state and count", async () => {
@@ -100,7 +100,7 @@ describe("GET /api/conversations/current", () => {
     const bruno = await signIn(app, "bruno.tavares@nexo.com.br");
     await say(ana.cookie, "m1", "segredo da Ana");
 
-    expect((await current(bruno.cookie)).body).toEqual({ conversation: null });
+    expect((await current(bruno.cookie)).body).toEqual({ conversation: null, lastClosed: null });
   });
 });
 
@@ -112,12 +112,30 @@ describe("POST /api/conversations/current/close", () => {
 
     const res = await postJson(app, "/api/conversations/current/close", {}, cookie);
     expect(res.status).toBe(204);
-    expect((await current(cookie)).body).toEqual({ conversation: null });
+    expect((await current(cookie)).body).toEqual({ conversation: null, lastClosed: null });
 
     await say(cookie, "m1", "nova");
     const fresh = (await current(cookie)).body.conversation;
     expect(fresh?.id).not.toBe(old?.id);
     expect(fresh?.employeeMessages).toBe(1);
+  });
+
+  it("closes a conversation an analyst is answering", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    await say(cookie, "m1", "Quero falar com um analista");
+    await setConversationState(db, "ana.souza", "with_analyst", new Date(), "rafael.lima");
+
+    const res = await postJson(app, "/api/conversations/current/close", {}, cookie);
+    expect(res.status).toBe(204);
+    expect((await current(cookie)).body).toEqual({ conversation: null, lastClosed: null });
+  });
+
+  it("needs no reminder of a conversation the employee closed", async () => {
+    const { cookie } = await signIn(app, "ana.souza@nexo.com.br");
+    await say(cookie, "m1", "antiga");
+    await postJson(app, "/api/conversations/current/close", {}, cookie);
+
+    expect((await current(cookie)).body).toEqual({ conversation: null, lastClosed: null });
   });
 
   it("is a no-op without an open conversation", async () => {

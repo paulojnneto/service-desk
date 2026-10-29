@@ -36,6 +36,13 @@
       "when": 1793277864296,
       "tag": "0004_usage_per_reply",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793317571360,
+      "tag": "0005_conversation_closed_by",
+      "breakpoints": true
     }
   ]
 }

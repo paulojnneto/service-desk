@@ -54,7 +54,7 @@ The sign-in is a cookie, so use two browser profiles or a normal and a private w
 1. As Ana, "Quero falar com um analista". As Rafael, the conversation is on top of "Para você", with the agent's summary and Ana's tickets.
 2. Rafael clicks "Assumir atendimento"; within 3 seconds Ana sees "Rafael Lima assumiu o atendimento" and who is answering.
 3. They exchange messages; each side sees the other's within 3 seconds.
-4. "Devolver ao agente": Ana's next message gets the agent again, which knows what Rafael said. "Encerrar atendimento": Ana's chat says it was closed and offers a new conversation.
+4. "Devolver ao agente": Ana's next message gets the agent again, which knows what Rafael said. "Encerrar atendimento": Ana's chat says it was closed and offers a new conversation. When she comes back later, the new chat starts with "Seu último atendimento foi encerrado por Rafael Lima em …".
 
 Sign in as Júlia at the same time to see that only the analyst who took a conversation over can answer it.
 

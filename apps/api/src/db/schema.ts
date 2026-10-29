@@ -31,6 +31,9 @@ export const conversations = pgTable(
     startedAt: moment("started_at").notNull(),
     updatedAt: moment("updated_at").notNull(),
     closedAt: moment("closed_at"),
+    // Who closed it: the analyst, or the employee with "Nova conversa". The next chat tells
+    // the employee when an analyst closed the last one.
+    closedBy: text("closed_by"),
   },
   (t) => [
     // At most one open conversation per employee (S-05.4).
