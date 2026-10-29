@@ -47,6 +47,12 @@ function pickFlow(turn: Turn): Flow {
   if (/analista/.test(turn.lastQuestion) && /^nao/.test(user)) return declined;
   if (/analista/.test(turn.lastQuestion) && /explicar/.test(user)) return explainAgain;
   if (/analista|atendente|humano|falar com (uma )?pessoa/.test(user)) return handoff;
+  // Something down for a team or the whole company (R6): a person, at once (stage 9, S-09.2).
+  if (
+    /tod[oa] (o time|a equipe|a empresa|o setor|o departamento)|ninguem (aqui )?consegue/.test(user)
+  ) {
+    return critical;
+  }
   if (outOfScopeArea(user)) return outOfScope;
   if (/reabr/.test(user) && number) return reopen;
   if (/adicion|acrescent|complement/.test(user) && number) return addInformation;
@@ -57,11 +63,23 @@ function pickFlow(turn: Turn): Flow {
   if (/horario|plantao|que horas|funciona o service desk/.test(user)) return hours;
   if (/quem esta sendo afetado|consegue trabalhar/.test(turn.lastQuestion))
     return createFromAnswers;
+  // Windows 11 with who is affected and the urgency in the same answer: straight to the draft.
+  if (
+    /versao do windows/.test(turn.lastQuestion) &&
+    /windows 11|win 11/.test(user) &&
+    /so eu|minha equipe|meu time|toda a empresa/.test(user) &&
+    URGENCY_HINT.test(user)
+  ) {
+    return createFromAnswers;
+  }
   if (/vpn/.test(user) || (/versao do windows/.test(turn.lastQuestion) && /windows/.test(user))) {
     return vpn;
   }
   if (/abrir (um )?chamado|nao funciona|parou|lento|travando|nao liga/.test(user))
     return newProblem;
+  // A "how do I" question: the help center first (S-06.2).
+  if (/^como (faco|posso|configuro|redefino|troco|altero)|^como (eu )?(faco|consigo)/.test(user))
+    return helpCenter;
   if (turn.handedBack && turn.lastAnalyst) return resumeAfterAnalyst;
   return unclear;
 }
@@ -416,6 +434,51 @@ const handoff: Flow = (turn) => {
   );
 };
 
+const critical: Flow = (turn) => {
+  const result = turn.results.get("transferirParaAnalista");
+  if (!result) {
+    return tools(
+      call("transferirParaAnalista", {
+        gatilho: "caso_critico",
+        resumo: `Caso crítico relatado pela pessoa: ${turn.raw}`.slice(0, 1000),
+      }),
+      decision(
+        "falar_com_analista",
+        "alta",
+        "Algo parou para uma equipe inteira; num caso crítico a conversa vai direto para uma pessoa.",
+        ["R6", "R9"],
+      ),
+    );
+  }
+  if (result.indisponivel) return unavailableText();
+  return text(
+    "Isso é um caso crítico, então já chamei a equipe do service desk com um resumo. Um analista vai responder por aqui em seguida.",
+  );
+};
+
+const helpCenter: Flow = (turn) => {
+  const result = turn.results.get("buscarNaCentral");
+  if (!result) {
+    return tools(
+      call("buscarNaCentral", { pergunta: turn.raw }),
+      decision(
+        "duvida",
+        "alta",
+        "A pessoa fez uma pergunta que a central de ajuda pode responder.",
+        [],
+      ),
+    );
+  }
+  if (result.indisponivel) return unavailableText();
+  const [article] = (result.artigos ?? []) as { titulo: string; texto: string }[];
+  if (!article) {
+    return text(
+      "Não encontrei um artigo da central de ajuda sobre isso. Se quiser, me conte o que está acontecendo e eu abro um chamado.",
+    );
+  }
+  return text(`Segundo o artigo "${article.titulo}" da central de ajuda: ${article.texto}`);
+};
+
 const discard: Flow = (turn) => {
   const result = turn.results.get("descartarRascunho");
   if (!result) {
@@ -492,13 +555,17 @@ const explainAgain: Flow = (turn) => {
 };
 
 // Back from the analyst (stage 9, S-09.11): the agent picks up from what the person said.
+// "Still not working" after the analyst tried something is a ticket to open.
 const resumeAfterAnalyst: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
+    const stillBroken = /ainda (nao|esta)|continua|nao voltou|nao resolveu/.test(turn.user);
     return tools(
       decision(
-        "outro",
+        stillBroken ? "abrir_chamado" : "outro",
         "alta",
-        "A conversa voltou do analista; retomei a partir do que ele disse.",
+        stillBroken
+          ? "O analista tentou resolver e o problema continua; o próximo passo é um chamado."
+          : "A conversa voltou do analista; retomei a partir do que ele disse.",
         [],
       ),
     );

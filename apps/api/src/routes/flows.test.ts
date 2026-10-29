@@ -226,6 +226,26 @@ describe("simulated flows", () => {
     expect((await lastDecision())?.rationale).not.toContain("Carla");
   });
 
+  it("answers a help center question with its article (stage 10)", async () => {
+    const answer = await say("Como faço para redefinir a senha da rede?");
+
+    expect(answer).toContain("Redefinir a senha da rede");
+    expect(await lastDecision()).toMatchObject({ intent: "duvida", action: "respondeu_central" });
+    expect(await draftCount()).toBe(0);
+  });
+
+  it("hands a critical case to an analyst at once (stage 10)", async () => {
+    const answer = await say(
+      "A VPN caiu para todo o time de vendas, ninguém consegue trabalhar e temos clientes esperando.",
+    );
+
+    expect(answer).toContain("caso crítico");
+    expect((await current()).state).toBe("waiting_analyst");
+    const [handoff] = await queryRows<{ reason: string }>(db, sql`select reason from handoffs`);
+    expect(handoff?.reason).toBe("caso_critico");
+    expect(await draftCount()).toBe(0);
+  });
+
   it("redirects out-of-scope requests without drafts", async () => {
     const answer = await say("Como peço reembolso de uma viagem?");
 

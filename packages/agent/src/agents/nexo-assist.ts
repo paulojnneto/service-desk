@@ -12,6 +12,7 @@ import {
 import { transferirParaAnalista } from "../tools/handoff";
 import { perguntar } from "../tools/question";
 import { buscarNaCentral, consultarChamado, listarMeusChamados } from "../tools/read";
+import { reportUsage, usageOf } from "../usage";
 import { instructionsFor } from "./instructions";
 
 // The tool keys are the names the model sees and the UI labels (stage 6 tech spec).
@@ -35,6 +36,10 @@ export const nexoAssist = new Agent<"nexo-assist", typeof nexoTools, undefined, 
   instructions: ({ requestContext }) => instructionsFor(requestContext),
   model: resolveModel(),
   tools: nexoTools,
-  // The longest flow fits; a loop cannot run up cost (N10).
-  defaultOptions: { maxSteps: 6 },
+  defaultOptions: {
+    // The longest flow fits; a loop cannot run up cost (N10).
+    maxSteps: 6,
+    // Tokens and model calls of the turn, for the evals and the cost estimate (stage 10).
+    onFinish: ({ totalUsage, steps }) => reportUsage(usageOf(totalUsage, steps.length)),
+  },
 });

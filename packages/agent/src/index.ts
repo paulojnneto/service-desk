@@ -11,6 +11,7 @@ export {
   type NexoContext,
 } from "./context";
 export { buildDecisionRecord } from "./decision";
+export { onAgentUsage, type AgentUsage } from "./usage";
 
 export const mastra = new Mastra({
   agents: { nexoAssist },

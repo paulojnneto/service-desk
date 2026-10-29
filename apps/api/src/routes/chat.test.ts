@@ -1,4 +1,4 @@
-import type { AgentServices } from "@nexo/agent";
+import { onAgentUsage, type AgentServices, type AgentUsage } from "@nexo/agent";
 import { findPersonById, MESSAGES_PER_SESSION, type Person } from "@nexo/shared";
 import type { UIMessageChunk } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -295,6 +295,18 @@ describe("chat route", () => {
 
     expect(events.some((e) => e.type === "message-metadata")).toBe(false);
     expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
+  });
+
+  it("reports the turn's model calls when it finishes (stage 10)", async () => {
+    const reports: AgentUsage[] = [];
+    const stop = onAgentUsage((usage) => reports.push(usage));
+    const cookie = await cookieFor("ana.souza@nexo.com.br");
+
+    await (await send(cookie, "m1")).text();
+    stop();
+
+    // The scripted model looks up the hours, then answers: two calls, no tokens.
+    expect(reports).toEqual([{ inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, steps: 2 }]);
   });
 
   it("saves the reply even when the browser stops reading mid-reply", async () => {
