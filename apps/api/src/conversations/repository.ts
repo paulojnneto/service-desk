@@ -406,6 +406,23 @@ export async function appendAnalystMessage(
   });
 }
 
+// What the limits count since `since` (stage 11 PRD, S-11.6 and S-11.7): this employee's agent
+// turns and the estimated cost of every agent turn. Server replies do not count.
+export async function usageSince(db: Db, employeeId: string, since: Date) {
+  const [row] = await db
+    .select({
+      employeeTurns:
+        sql<number>`count(*) filter (where ${conversations.employeeId} = ${employeeId})`.mapWith(
+          Number,
+        ),
+      costUsd: sql<number>`coalesce(sum(${decisions.costUsd}), 0)`.mapWith(Number),
+    })
+    .from(decisions)
+    .innerJoin(conversations, eq(conversations.id, decisions.conversationId))
+    .where(and(eq(decisions.source, "agent"), gte(decisions.createdAt, since)));
+  return { employeeTurns: row?.employeeTurns ?? 0, costUsd: row?.costUsd ?? 0 };
+}
+
 // --- Console reads (stage 9 PRD, S-09.3, S-09.4 and S-09.12) ---------------------------------
 
 // Closed conversations stay in "Todas" for a few days (decision 8).

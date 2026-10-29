@@ -3,6 +3,7 @@ import { createMiddleware } from "hono/factory";
 import type { Db } from "./db/connect";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { RunAgent } from "./routes/chat";
+import type { Limits } from "./limits";
 import { readSession } from "./session";
 
 export type AppEnv = {
@@ -11,6 +12,7 @@ export type AppEnv = {
     tickets: TicketsClient;
     now: () => Date;
     runAgent: RunAgent;
+    limits: Limits;
     person: Person | null;
   };
 };

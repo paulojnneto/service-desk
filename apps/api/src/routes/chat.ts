@@ -32,11 +32,22 @@ import { requireRole, type AppEnv } from "../auth";
 import {
   appendEmployeeMessage,
   appendMessage,
+  handOffConversation,
+  usageSince,
   lastConfidence,
   listMessages,
   type AppendResult,
 } from "../conversations/repository";
-import { toAgentHistory } from "../conversations/to-ui";
+import { toAgentHistory, toStoredMessage } from "../conversations/to-ui";
+import type { Db } from "../db/connect";
+import {
+  asksForPerson,
+  HANDOFF_PAST_LIMIT_TEXT,
+  LIMIT_TEXT,
+  limitReached,
+  startOfDay,
+  type LimitReached,
+} from "../limits";
 import { findWaitingDraft, toDraftView } from "../drafts/repository";
 
 // The client sends only the new message (stage 5 PRD, S-05.6). The history the agent
@@ -97,6 +108,81 @@ export const runNexoAssist: RunAgent = (params) =>
   handleChatStream({ mastra, agentId: "nexo-assist", version: "v7", params }) as Promise<
     ReadableStream<UIMessageChunk>
   >;
+
+// The fixed reply past a limit, stored and streamed like an agent reply. A request for a person
+// still hands off (PRD decision 7): an employee is never cut off from the service desk.
+async function answerPastLimit(
+  db: Db,
+  employeeId: string,
+  conversationId: string,
+  reached: LimitReached,
+  said: string,
+  at: Date,
+) {
+  const handOff = asksForPerson(said);
+  if (handOff) {
+    await handOffConversation(
+      db,
+      conversationId,
+      {
+        reason: "pedido_do_funcionario",
+        summary:
+          `Pedido de analista com o assistente pausado pelo limite de uso. Mensagem: ${said}`.slice(
+            0,
+            1000,
+          ),
+        ticketNumber: null,
+      },
+      at,
+    );
+  }
+  const decision: DecisionRecord = {
+    intent: handOff ? "falar_com_analista" : "outro",
+    action: handOff ? "transferiu" : "limite_de_uso",
+    confidence: "alta",
+    rationale: handOff
+      ? "O assistente está pausado pelo limite de uso; a pessoa pediu um analista, então a conversa foi transferida sem o modelo."
+      : reached === "budget"
+        ? "O orçamento diário do assistente foi atingido; a resposta é fixa, sem o modelo."
+        : "A pessoa atingiu o limite diário de mensagens com o assistente; a resposta é fixa, sem o modelo.",
+    rules: [],
+    enforcedRules: handOff ? ["R6"] : [],
+    tools: handOff ? [{ name: "transferirParaAnalista", outcome: "ok" }] : [],
+    source: "server",
+    registered: true,
+  };
+  const text = handOff ? HANDOFF_PAST_LIMIT_TEXT : LIMIT_TEXT[reached];
+  const row = await appendMessage(
+    db,
+    employeeId,
+    { author: "agent", parts: [{ type: "text", text }], decision },
+    at,
+  );
+  const stored = row ? toStoredMessage(row) : null;
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      writer.write({ type: "start", ...(stored ? { messageId: stored.id } : {}) });
+      writer.write({ type: "text-start", id: "limit" });
+      writer.write({ type: "text-delta", id: "limit", delta: text });
+      writer.write({ type: "text-end", id: "limit" });
+      if (stored) {
+        writer.write({
+          type: "message-metadata",
+          messageMetadata: { ...stored.metadata, decision },
+        });
+      }
+      if (handOff) {
+        writer.write({
+          type: "data-conversation-state",
+          data: { state: "waiting_analyst" },
+          transient: true,
+        });
+      }
+      writer.write({ type: "finish" });
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
 
 function replyUsage(usage: AgentUsage, durationMs: number) {
   const model = modelName();
@@ -172,6 +258,21 @@ export const chatRoutes = new Hono<AppEnv>()
         },
       });
       return createUIMessageStreamResponse({ stream });
+    }
+
+    // Past a usage limit the server answers, without the model (stage 11 PRD, S-11.6, S-11.7).
+    try {
+      const reached = limitReached(
+        await usageSince(db, person.id, startOfDay(now())),
+        c.get("limits"),
+      );
+      if (reached) {
+        const text = input.parts[0].text;
+        return await answerPastLimit(db, person.id, saved.conversation.id, reached, text, now());
+      }
+    } catch (error) {
+      console.error("Could not check the usage limits:", error);
+      return c.json({ error: "unavailable" }, 503);
     }
 
     const agentHistory = toAgentHistory(history);

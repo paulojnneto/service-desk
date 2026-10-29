@@ -1,6 +1,7 @@
 import { onAgentUsage, type AgentServices, type AgentUsage } from "@nexo/agent";
 import { findPersonById, MESSAGES_PER_SESSION, type Person } from "@nexo/shared";
 import type { UIMessageChunk } from "ai";
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendEmployeeMessage,
@@ -10,6 +11,7 @@ import {
   setConversationState,
 } from "../conversations/repository";
 import type { Db } from "../db/connect";
+import { HANDOFF_PAST_LIMIT_TEXT, LIMIT_TEXT } from "../limits";
 import { createTestApp, signIn } from "../test-app";
 import { buildChatParams, parseChatBody, runNexoAssist, type RunAgent } from "./chat";
 
@@ -356,6 +358,100 @@ describe("chat route", () => {
     const rows = await storedCount("ana.souza", 2);
     expect(rows.map((r) => r.author)).toEqual(["employee", "agent"]);
     expect(JSON.stringify(rows[1]?.parts)).toContain("das 8h às 18h");
+  });
+});
+
+describe("usage limits (stage 11)", () => {
+  // Sends a message and waits until the conversation has the expected number of messages.
+  async function say(
+    target: App,
+    cookie: string,
+    employeeId: string,
+    text: string,
+    length: number,
+  ) {
+    await (await send(cookie, crypto.randomUUID(), text, target)).text();
+    const rows = await storedCount(employeeId, length);
+    const last = rows.at(-1)!;
+    return {
+      author: last.author,
+      text: (last.parts as { type: string; text?: string }[]).map((p) => p.text ?? "").join(""),
+    };
+  }
+
+  it("answers past the employee's allowance without the agent, and starts again the next day", async () => {
+    const today = new Date("2026-10-29T15:00:00Z");
+    const limited = await createTestApp({
+      db,
+      runAgent,
+      now: () => today,
+      limits: { turnsPerDay: 2, dailyBudgetUsd: 0 },
+    });
+    const ana = (await signIn(limited.app, "ana.souza@nexo.com.br")).cookie;
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 2);
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 4);
+    runAgent.mockClear();
+
+    const third = await say(limited.app, ana, "ana.souza", "E aos sábados?", 6);
+
+    expect(third).toEqual({ author: "agent", text: LIMIT_TEXT.employee });
+    expect(runAgent).not.toHaveBeenCalled();
+    const open = await findOpenConversation(db, "ana.souza");
+    const decisions = await listDecisions(db, open!.id);
+    expect(decisions.at(-1)).toMatchObject({ action: "limite_de_uso", source: "server" });
+
+    // Another employee is not affected.
+    const bruno = (await signIn(limited.app, "bruno.tavares@nexo.com.br")).cookie;
+    expect(
+      (await say(limited.app, bruno, "bruno.tavares", "Qual o horário do service desk?", 2)).text,
+    ).not.toBe(LIMIT_TEXT.employee);
+
+    // The next São Paulo day counts again.
+    const tomorrow = await createTestApp({
+      db,
+      runAgent,
+      now: () => new Date("2026-10-30T15:00:00Z"),
+      limits: { turnsPerDay: 2, dailyBudgetUsd: 0 },
+    });
+    // A new sign-in: yesterday's session has expired by tomorrow's clock.
+    const anaTomorrow = (await signIn(tomorrow.app, "ana.souza@nexo.com.br")).cookie;
+    const again = await say(
+      tomorrow.app,
+      anaTomorrow,
+      "ana.souza",
+      "Qual o horário do service desk?",
+      8,
+    );
+    expect(again.text).not.toBe(LIMIT_TEXT.employee);
+  });
+
+  it("pauses everyone at the daily budget, still hands off, and leaves the analyst working", async () => {
+    const limited = await createTestApp({
+      db,
+      runAgent,
+      limits: { turnsPerDay: 0, dailyBudgetUsd: 0.5 },
+    });
+    const ana = (await signIn(limited.app, "ana.souza@nexo.com.br")).cookie;
+    await say(limited.app, ana, "ana.souza", "Qual o horário do service desk?", 2);
+    await db.execute(sql`update decisions set cost_usd = 0.6`);
+    runAgent.mockClear();
+
+    const paused = await say(limited.app, ana, "ana.souza", "E aos sábados?", 4);
+    expect(paused.text).toBe(LIMIT_TEXT.budget);
+
+    const handedOff = await say(limited.app, ana, "ana.souza", "Quero falar com um analista", 7);
+    expect(handedOff.text).toBe(HANDOFF_PAST_LIMIT_TEXT);
+    expect(runAgent).not.toHaveBeenCalled();
+    const open = await findOpenConversation(db, "ana.souza");
+    expect(open?.state).toBe("waiting_analyst");
+
+    const rafael = (await signIn(limited.app, "rafael.lima@nexo.com.br")).cookie;
+    const takeOver = await limited.app.request(`/api/analyst/conversations/${open!.id}/take-over`, {
+      method: "POST",
+      headers: { cookie: rafael, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(takeOver.status).toBe(200);
   });
 });
 

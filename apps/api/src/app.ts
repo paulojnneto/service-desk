@@ -4,6 +4,7 @@ import { session, type AppEnv } from "./auth";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { Db } from "./db/connect";
 import { analystRoutes } from "./routes/analyst";
+import { readLimits, type Limits } from "./limits";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes, runNexoAssist, type RunAgent } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
@@ -16,6 +17,8 @@ export type AppOptions = {
   now?: () => Date;
   // The agent run; tests replace it to fail or to inspect what the agent receives.
   runAgent?: RunAgent;
+  // Usage limits; from the environment unless given (stage 11).
+  limits?: Limits;
 };
 
 // Backend for the UI: runs the agent, so model keys never reach the browser.
@@ -25,6 +28,7 @@ export function createApp({
   tickets,
   now = () => new Date(),
   runAgent = runNexoAssist,
+  limits = readLimits(),
 }: AppOptions) {
   const app = new Hono<AppEnv>();
 
@@ -35,6 +39,7 @@ export function createApp({
     c.set("tickets", tickets);
     c.set("now", now);
     c.set("runAgent", runAgent);
+    c.set("limits", limits);
     await next();
   });
   app.use("/api/*", jsonOnlyPosts, session);
