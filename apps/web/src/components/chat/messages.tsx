@@ -1,6 +1,9 @@
 import type { MessageMetadata } from "@nexo/shared";
 import type { UIMessage } from "ai";
 import { Check, LoaderCircle } from "lucide-react";
+import { useId, useState } from "react";
+import { DecisionDetail } from "../decision/decision-detail";
+import { WhyToggle } from "../decision/why-toggle";
 import { QuickQuestion } from "./cards/quick-question";
 import { TicketCard } from "./cards/ticket-card";
 import { TicketPicker } from "./cards/ticket-picker";
@@ -26,6 +29,8 @@ export function UserMessage({ message }: { message: UIMessage }) {
 export type CardContext = {
   messages: UIMessage[];
   busy: boolean;
+  // A reply is streaming: its decision record arrives when it ends (stage 8 PRD, S-08.4).
+  replying: boolean;
   // Sends a choice as the employee's message (S-07.2, S-07.3).
   onPick: (text: string) => void;
   drafts: DraftActions;
@@ -35,6 +40,8 @@ export type CardContext = {
 // As in the prototype, a ticket card comes before the text, a question with options sits in
 // the same bubble as the text, and the picker and the draft follow it.
 export function AgentMessage({ message, context }: { message: UIMessage; context?: CardContext }) {
+  const [explained, setExplained] = useState(false);
+  const detailId = useId();
   const labels = actionLabels(message);
   const cards = cardsOf(message);
   const text = messageText(message);
@@ -42,6 +49,10 @@ export function AgentMessage({ message, context }: { message: UIMessage; context
   const metadata = message.metadata as MessageMetadata | undefined;
   const name = metadata?.author === "analyst" ? (metadata.authorName ?? "Analista") : "Nexo Assist";
   const readAt = metadata?.createdAt ?? new Date().toISOString();
+  // Every agent reply can be explained once it has ended (stage 8 PRD, S-08.1); an analyst's
+  // reply is a person's, not a decision.
+  const streaming = context?.replying === true && context.messages.at(-1)?.id === message.id;
+  const explainable = metadata?.author !== "analyst" && (metadata?.decision || !streaming);
 
   const options = cards.find(
     (c): c is Extract<Card, { kind: "question" }> =>
@@ -71,7 +82,16 @@ export function AgentMessage({ message, context }: { message: UIMessage; context
             {label.label}
           </span>
         ))}
+        {explainable && (
+          <WhyToggle
+            open={explained}
+            controls={detailId}
+            record={metadata?.decision}
+            onToggle={() => setExplained((open) => !open)}
+          />
+        )}
       </StatusLine>
+      {explainable && explained && <DecisionDetail id={detailId} record={metadata?.decision} />}
       {before.map((card) => (
         <CardFor
           key={card.id}

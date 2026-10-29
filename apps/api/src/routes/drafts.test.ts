@@ -88,11 +88,17 @@ describe("POST /api/drafts/:id/confirm", () => {
     expect(body.draft).toMatchObject({ status: "confirmed", resultTicket: "INC-20312" });
     const text = (body.message?.parts[0] as { text: string }).text;
     expect(text).toContain("Abri o chamado INC-20312");
-    expect(body.message?.metadata.decision).toMatchObject({
+    // Marked as the server's, with every rule from the code that ran (stage 8, S-08.7).
+    expect(body.message?.metadata.decision).toEqual({
       intent: "abrir_chamado",
       action: "criou_chamado",
       confidence: "alta",
-      rules: ["R3", "R4", "R9"],
+      rationale: `A pessoa confirmou o rascunho ${draft.number}.`,
+      rules: [],
+      enforcedRules: ["R3", "R4", "R9"],
+      tools: [{ name: "criarChamado", outcome: "ok", subject: "INC-20312" }],
+      source: "server",
+      registered: true,
     });
     const created = (await anaTickets()).find((t) => t.number === "INC-20312");
     expect(created).toMatchObject({ priority: "alta", affected: "so_eu", category: "Rede e VPN" });
@@ -134,7 +140,11 @@ describe("POST /api/drafts/:id/confirm", () => {
     });
     const { body } = await decide(cookie, reopen.id, "confirm");
 
-    expect(body.message?.metadata.decision?.action).toBe("reabriu_chamado");
+    expect(body.message?.metadata.decision).toMatchObject({
+      action: "reabriu_chamado",
+      enforcedRules: ["R3", "R5"],
+      tools: [{ name: "reabrirChamado", outcome: "ok", subject: "INC-20150" }],
+    });
     const history = await tickets.as("ana.souza").get("INC-20311");
     expect(history.events?.at(-1)).toMatchObject({ kind: "updated" });
     expect((await tickets.as("ana.souza").get("INC-20150")).status).not.toBe("resolvido");
@@ -204,7 +214,19 @@ describe("POST /api/drafts/:id/cancel", () => {
 
     expect(status).toBe(200);
     expect(body.draft?.status).toBe("cancelled");
-    expect(body.message?.metadata.decision?.action).toBe("cancelou_rascunho");
+    expect(body.message?.metadata.decision).toMatchObject({
+      action: "cancelou_rascunho",
+      rationale: `A pessoa cancelou o rascunho ${draft.number}.`,
+      enforcedRules: ["R3"],
+      tools: [{ name: "cancelarRascunho", outcome: "ok", subject: draft.number }],
+      source: "server",
+    });
+    // The stored record is the one the reply carried.
+    const res = await app.request("/api/conversations/current", { headers: { cookie } });
+    const { conversation } = (await res.json()) as { conversation: { messages: StoredMessage[] } };
+    expect(conversation.messages.at(-1)?.metadata.decision).toEqual(
+      body.message?.metadata.decision,
+    );
     expect((await decide(cookie, draft.id, "confirm")).body.error).toBe("draft_closed");
     expect((await anaTickets()).length).toBe(before);
   });

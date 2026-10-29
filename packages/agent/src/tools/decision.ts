@@ -1,8 +1,6 @@
 import { createTool } from "@mastra/core/tools";
-import { Confidence, Intent } from "@nexo/shared";
+import { Confidence, Intent, RuleId } from "@nexo/shared";
 import { z } from "zod";
-
-export const RULE_IDS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9"] as const;
 
 // The model's part of the decision record (stage 6 PRD, S-06.13). The action and the tools
 // are not asked for: the API derives them from the tools that actually ran (S-06.14).
@@ -13,8 +11,14 @@ export const registrarDecisao = createTool({
   inputSchema: z.object({
     intencao: Intent,
     confianca: Confidence,
-    justificativa: z.string().min(5).max(400).describe("Uma ou duas frases, em português"),
-    regras: z.array(z.enum(RULE_IDS)).max(9).describe("Regras do Anexo A aplicadas"),
+    justificativa: z
+      .string()
+      .min(5)
+      .max(400)
+      .describe(
+        "Uma ou duas frases neutras, em português, para o funcionário e o analista: o que foi pedido e por que você seguiu esse caminho. A pessoa na terceira pessoa; sem nomes de ferramentas, códigos ou dados de outra pessoa",
+      ),
+    regras: z.array(RuleId).max(9).describe("Regras do Anexo A aplicadas"),
   }),
   execute: async () => ({ registrado: true }),
 });

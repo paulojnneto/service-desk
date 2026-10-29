@@ -98,7 +98,7 @@ export const prepararAtualizacao = createTool({
 export const prepararReabertura = createTool({
   id: "preparar-reabertura",
   description:
-    "Prepara o rascunho para reabrir um chamado resolvido do funcionário. Só chamados resolvidos há até 7 dias podem ser reabertos; para os outros, a resposta explica o motivo e você deve oferecer um chamado novo que cite o antigo.",
+    "Prepara o rascunho para reabrir um chamado resolvido do funcionário. Chame para qualquer pedido de reabertura, mesmo de um chamado antigo: esta ferramenta confere o prazo de 7 dias, não decida pela data. Para os que não podem ser reabertos, a resposta explica o motivo e você deve oferecer um chamado novo que cite o antigo.",
   inputSchema: z.object({
     numero: z.string().min(3).max(20),
     motivo: z.string().min(1).max(2000),

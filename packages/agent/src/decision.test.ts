@@ -7,10 +7,10 @@ const decided = (input: Record<string, unknown>) => ({
   input,
   output: { registrado: true },
 });
-const tool = (name: string, output: unknown, state = "output-available") => ({
+const tool = (name: string, output: unknown, state = "output-available", input = {}) => ({
   type: `tool-${name}`,
   state,
-  input: {},
+  input,
   output,
 });
 const text = { type: "text", text: "Pronto." };
@@ -45,7 +45,7 @@ describe("buildDecisionRecord", () => {
 
     expect(record.action).toBe("preparou_rascunho");
     expect(record.tools).toEqual([
-      { name: "listarMeusChamados", outcome: "ok" },
+      { name: "listarMeusChamados", outcome: "ok", subject: "abertos" },
       { name: "buscarNaCentral", outcome: "ok" },
       { name: "prepararChamado", outcome: "ok" },
     ]);
@@ -100,5 +100,108 @@ describe("buildDecisionRecord", () => {
 
     expect(outOfScope.action).toBe("redirecionou");
     expect(unclear.action).toBe("pediu_esclarecimento");
+  });
+
+  it("marks the record as the agent's, and as registered only when the model called it", () => {
+    expect(buildDecisionRecord([decided(registered)])).toMatchObject({
+      source: "agent",
+      registered: true,
+    });
+    expect(buildDecisionRecord([text])).toMatchObject({ source: "agent", registered: false });
+  });
+
+  it("records a question with options as perguntou, below low confidence", () => {
+    const question = tool("perguntar", { pergunta: {} }, "output-available", {
+      pergunta: "Qual a urgência?",
+      opcoes: ["Estou parado", "Sem urgência"],
+    });
+
+    expect(buildDecisionRecord([question, decided(registered)]).action).toBe("perguntou");
+    expect(
+      buildDecisionRecord([question, decided({ ...registered, confianca: "baixa" })]).action,
+    ).toBe("pediu_esclarecimento");
+    expect(
+      buildDecisionRecord([tool("listarMeusChamados", { chamados: [] }), question]).action,
+    ).toBe("consultou_chamados");
+  });
+});
+
+describe("buildDecisionRecord, subjects and enforced rules", () => {
+  it("keeps one short, safe subject per tool", () => {
+    const record = buildDecisionRecord([
+      tool("consultarChamado", { chamado: {} }, "output-available", { numero: " inc-20311 " }),
+      tool("buscarNaCentral", { artigos: [] }, "output-available", { pergunta: "x".repeat(300) }),
+      tool("listarMeusChamados", { chamados: [] }, "output-available", { escopo: "todos" }),
+      tool("perguntar", { pergunta: {} }, "output-available", {
+        pergunta: "Qual deles?",
+        chamados: ["INC-20311"],
+      }),
+      tool("transferirParaAnalista", { transferido: true }, "output-available", {
+        resumo: "Ana está sem VPN desde ontem e tem reunião às 14h.",
+      }),
+    ]);
+
+    expect(record.tools.map((t) => t.subject)).toEqual([
+      "INC-20311",
+      "x".repeat(80),
+      "todos",
+      "chamados",
+      undefined,
+    ]);
+  });
+
+  it("lists the rules a creation draft enforces, even when the model cites none", () => {
+    const record = buildDecisionRecord([
+      tool("listarMeusChamados", { chamados: [] }),
+      tool("buscarNaCentral", { artigos: [] }),
+      tool("prepararChamado", { rascunho: {} }),
+      decided({ ...registered, regras: [] }),
+    ]);
+
+    expect(record.rules).toEqual([]);
+    expect(record.enforcedRules).toEqual(["R3", "R4", "R7", "R9"]);
+  });
+
+  it("records a refused reopening with R5 enforced (INC-19877)", () => {
+    const record = buildDecisionRecord([
+      tool("prepararReabertura", { permitido: false, motivo: "..." }, "output-available", {
+        numero: "INC-19877",
+        motivo: "O Outlook parou de novo.",
+      }),
+      decided({ ...registered, intencao: "reabrir_chamado", regras: [] }),
+    ]);
+
+    expect(record).toMatchObject({
+      action: "recusou_reabertura",
+      enforcedRules: ["R5", "R7"],
+      tools: [{ name: "prepararReabertura", outcome: "recusado", subject: "INC-19877" }],
+    });
+  });
+
+  it("enforces R7 for the ticket picker, whatever its outcome", () => {
+    const picker = tool("perguntar", { indisponivel: true }, "output-available", {
+      pergunta: "Qual deles?",
+      chamados: ["INC-20311"],
+    });
+    expect(buildDecisionRecord([picker, decided(registered)]).enforcedRules).toEqual(["R7"]);
+  });
+
+  it("enforces R8 only for an out-of-scope turn that wrote nothing", () => {
+    const outOfScope = decided({ ...registered, intencao: "fora_do_escopo", regras: [] });
+
+    expect(buildDecisionRecord([outOfScope]).enforcedRules).toEqual(["R8"]);
+    expect(
+      buildDecisionRecord([tool("prepararChamado", { rascunho: {} }), outOfScope]).enforcedRules,
+    ).not.toContain("R8");
+    expect(buildDecisionRecord([decided(registered)]).enforcedRules).toEqual([]);
+  });
+
+  it("never enforces the rules of a tool that failed", () => {
+    const record = buildDecisionRecord([
+      tool("prepararChamado", { indisponivel: true }),
+      tool("transferirParaAnalista", undefined, "output-error"),
+      decided(registered),
+    ]);
+    expect(record.enforcedRules).toEqual([]);
   });
 });

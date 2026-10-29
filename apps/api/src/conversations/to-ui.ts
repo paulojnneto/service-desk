@@ -32,8 +32,11 @@ function toDecisionRecord(row: DecisionRow): DecisionRecord {
     action: row.action as DecisionRecord["action"],
     confidence: row.confidence as DecisionRecord["confidence"],
     rationale: row.rationale,
-    rules: row.rules,
+    rules: row.rules as DecisionRecord["rules"],
+    enforcedRules: row.enforcedRules as DecisionRecord["enforcedRules"],
     tools: row.tools as DecisionRecord["tools"],
+    source: row.source as DecisionRecord["source"],
+    registered: row.registered,
   };
 }
 

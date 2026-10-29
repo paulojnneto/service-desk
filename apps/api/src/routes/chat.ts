@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MESSAGES_PER_SESSION,
   type Confidence,
+  type DecisionRecord,
   type DraftView,
   type Person,
   type StoredMessage,
@@ -12,6 +13,7 @@ import {
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
+  readUIMessageStream,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
@@ -81,6 +83,17 @@ export const runNexoAssist: RunAgent = (params) =>
   handleChatStream({ mastra, agentId: "nexo-assist", version: "v7", params }) as Promise<
     ReadableStream<UIMessageChunk>
   >;
+
+// The reply as the AI SDK assembles it from the chunks, or undefined if that fails.
+async function lastMessage(stream: ReadableStream<UIMessageChunk>) {
+  let last: UIMessage | undefined;
+  try {
+    for await (const message of readUIMessageStream({ stream })) last = message;
+  } catch (error) {
+    console.error("Could not assemble the agent's reply:", error);
+  }
+  return last;
+}
 
 export const chatRoutes = new Hono<AppEnv>()
   // Saves the employee's message, then streams the agent's reply (AI SDK UI format,
@@ -169,10 +182,35 @@ export const chatRoutes = new Hono<AppEnv>()
       }),
     );
 
+    // The decision record goes with the reply, before "finish", so the reply on screen can be
+    // explained without a reload (stage 8 PRD, S-08.4). It is built once; onEnd saves the same
+    // object, so the live and the stored record cannot differ.
+    let decision: DecisionRecord | undefined;
+    let finishedAt = now();
     const stream = createUIMessageStream({
       originalMessages: agentHistory as unknown as UIMessage[],
       generateId: randomUUID,
-      execute: ({ writer }) => writer.merge(watched),
+      execute: async ({ writer }) => {
+        const [toClient, toAssemble] = watched.tee();
+        const assembled = lastMessage(toAssemble);
+        let finish: UIMessageChunk | undefined;
+        const reader = toClient.getReader();
+        for (let read = await reader.read(); !read.done; read = await reader.read()) {
+          if (read.value.type === "finish") finish = read.value;
+          else writer.write(read.value);
+        }
+        const parts = (await assembled)?.parts;
+        if (!failed && parts) {
+          finishedAt = now();
+          // Built from what actually ran (stage 6 PRD, S-06.14).
+          decision = buildDecisionRecord(parts);
+          writer.write({
+            type: "message-metadata",
+            messageMetadata: { author: "agent", createdAt: finishedAt.toISOString(), decision },
+          });
+        }
+        if (finish) writer.write(finish);
+      },
       onEnd: async ({ responseMessage, isAborted }) => {
         if (!ended || failed || isAborted) return;
         try {
@@ -183,10 +221,9 @@ export const chatRoutes = new Hono<AppEnv>()
               id: responseMessage.id,
               author: "agent",
               parts: responseMessage.parts,
-              // Built from what actually ran (stage 6 PRD, S-06.14).
-              decision: buildDecisionRecord(responseMessage.parts),
+              decision: decision ?? buildDecisionRecord(responseMessage.parts),
             },
-            now(),
+            finishedAt,
           );
         } catch (error) {
           console.error("Could not save the agent's reply:", error);

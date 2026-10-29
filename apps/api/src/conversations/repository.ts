@@ -32,6 +32,16 @@ export async function findOpenConversation(
   return row ?? null;
 }
 
+// Any conversation by its id, for the analyst (stage 8 PRD, S-08.12). Employees never reach
+// this: their routes only work on the session's own open conversation.
+export async function findConversationById(
+  db: Db,
+  conversationId: string,
+): Promise<ConversationRow | null> {
+  const [row] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  return row ?? null;
+}
+
 export async function listMessages(db: Db, conversationId: string): Promise<MessageRow[]> {
   return db
     .select()

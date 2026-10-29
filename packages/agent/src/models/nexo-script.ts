@@ -67,7 +67,12 @@ const hours: Flow = (turn) => {
   if (!result) {
     return tools(
       call("consultarHorario", {}),
-      decision("duvida", "alta", "Pergunta sobre o horário de atendimento.", []),
+      decision(
+        "duvida",
+        "alta",
+        "A pessoa perguntou o horário de atendimento do service desk.",
+        [],
+      ),
     );
   }
   const { diasUteis, horario, plantao } = result as Record<string, string>;
@@ -82,7 +87,7 @@ const listTickets: Flow = (turn) => {
       decision(
         "status_chamado",
         "media",
-        "Quer saber de um chamado, mas não disse qual; listei os abertos.",
+        "A pessoa quer saber de um chamado sem dizer qual; listei os abertos para ela escolher.",
         ["R7"],
       ),
     );
@@ -110,7 +115,12 @@ const ticketStatus: Flow = (turn) => {
   if (!result) {
     return tools(
       call("consultarChamado", { numero: number }),
-      decision("status_chamado", "alta", `Pediu o status do ${number}.`, ["R7", "R9"]),
+      decision(
+        "status_chamado",
+        "alta",
+        `A pessoa pediu o status do ${number}; consultei o chamado.`,
+        ["R7", "R9"],
+      ),
     );
   }
   if (result.indisponivel) return unavailableText();
@@ -137,7 +147,12 @@ const askWhatToAdd: Flow = (turn) => {
   const number = lastTicketNumber(turn);
   if (!turn.results.has("registrarDecisao")) {
     return tools(
-      decision("adicionar_informacao", "alta", "Escolheu adicionar informação ao chamado.", ["R3"]),
+      decision(
+        "adicionar_informacao",
+        "alta",
+        "A pessoa escolheu acrescentar informação ao chamado.",
+        ["R3"],
+      ),
     );
   }
   return text(
@@ -149,7 +164,9 @@ const askWhatToAdd: Flow = (turn) => {
 
 const declined: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
-    return tools(decision("status_chamado", "alta", "Não quis chamar um analista agora.", []));
+    return tools(
+      decision("status_chamado", "alta", "A pessoa não quis chamar um analista agora.", []),
+    );
   }
   return text("Tudo bem. Se precisar, é só me chamar por aqui.");
 };
@@ -161,7 +178,12 @@ const addInformation: Flow = (turn) => {
     const message = turn.raw.replace(/^.*?(INC|REQ)-\d+\s*[:,.-]?\s*/i, "").trim() || turn.raw;
     return tools(
       call("prepararAtualizacao", { numero: number, mensagem: message }),
-      decision("adicionar_informacao", "alta", `Quer acrescentar informação ao ${number}.`, ["R3"]),
+      decision(
+        "adicionar_informacao",
+        "alta",
+        `A pessoa quer acrescentar informação ao ${number}; preparei o rascunho para ela conferir.`,
+        ["R3"],
+      ),
     );
   }
   return draftAnswer(result, `Preparei a informação nova para o ${number}.`);
@@ -173,7 +195,12 @@ const reopen: Flow = (turn) => {
   if (!result) {
     return tools(
       call("prepararReabertura", { numero: number, motivo: turn.raw }),
-      decision("reabrir_chamado", "alta", `Quer reabrir o ${number}.`, ["R3", "R5"]),
+      decision(
+        "reabrir_chamado",
+        "alta",
+        `A pessoa quer reabrir o ${number}; o sistema confere se ainda está no prazo.`,
+        ["R3", "R5"],
+      ),
     );
   }
   if (result.permitido === false) {
@@ -196,7 +223,7 @@ const vpn: Flow = (turn) => {
       decision(
         "abrir_chamado",
         "alta",
-        "VPN com erro 809: conferi chamados abertos e a central antes de abrir.",
+        "A VPN mostra o erro 809; antes de abrir um chamado, conferi se já havia um aberto e se a central de ajuda resolvia.",
         ["R1", "R2", "R4"],
       ),
     );
@@ -251,7 +278,12 @@ const createFromAnswers: Flow = (turn) => {
           pergunta: "Você consegue trabalhar enquanto isso não se resolve?",
           opcoes: ["Estou parado", "Tenho compromisso hoje", "Consigo contornar", "Sem urgência"],
         }),
-        decision("abrir_chamado", "alta", "Sei quem é afetado; falta a urgência.", ["R9"]),
+        decision(
+          "abrir_chamado",
+          "alta",
+          "Já sei quem é afetado; falta a urgência para calcular a prioridade.",
+          ["R9"],
+        ),
       );
     }
     return text("Entendi. Só mais uma coisa para calcular a prioridade:");
@@ -294,7 +326,7 @@ const createFromAnswers: Flow = (turn) => {
       decision(
         "abrir_chamado",
         "alta",
-        "Tenho impacto e urgência; montei o rascunho para confirmação.",
+        "Com quem é afetado e a urgência, o sistema calcula a prioridade; montei o rascunho para a pessoa conferir.",
         ["R1", "R2", "R3", "R4", "R9"],
       ),
     );
@@ -319,7 +351,7 @@ const newProblem: Flow = (turn) => {
       decision(
         "abrir_chamado",
         "media",
-        "Quer abrir um chamado; conferi os abertos para não duplicar.",
+        "A pessoa quer abrir um chamado; conferi os abertos para não duplicar.",
         ["R4"],
       ),
     );
@@ -357,9 +389,7 @@ const handoff: Flow = (turn) => {
           ),
         ...(number ? { numero: number } : {}),
       }),
-      decision("falar_com_analista", "alta", "O funcionário pediu para falar com um analista.", [
-        "R6",
-      ]),
+      decision("falar_com_analista", "alta", "A pessoa pediu para falar com um analista.", ["R6"]),
     );
   }
   if (result.indisponivel) return unavailableText();
@@ -377,7 +407,7 @@ const discard: Flow = (turn) => {
   if (!result) {
     return tools(
       call("descartarRascunho", {}),
-      decision("outro", "alta", "Desistiu do rascunho.", ["R3"]),
+      decision("outro", "alta", "A pessoa desistiu do rascunho.", ["R3"]),
     );
   }
   return text(
@@ -390,9 +420,12 @@ const discard: Flow = (turn) => {
 const outOfScope: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
     return tools(
-      decision("fora_do_escopo", "alta", "Assunto de outra área; redirecionei sem abrir chamado.", [
-        "R8",
-      ]),
+      decision(
+        "fora_do_escopo",
+        "alta",
+        "O pedido é de outra área; indiquei o canal certo sem abrir chamado.",
+        ["R8"],
+      ),
     );
   }
   const channel = OUT_OF_SCOPE_CHANNELS.find((c) => c.area === outOfScopeArea(turn.user));
@@ -406,7 +439,10 @@ const outOfScope: Flow = (turn) => {
 const injection: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
     return tools(
-      decision("outro", "alta", "Pedido para pular regras; as regras se mantêm.", ["R3", "R7"]),
+      decision("outro", "alta", "A pessoa pediu para pular as regras; elas continuam valendo.", [
+        "R3",
+        "R7",
+      ]),
     );
   }
   return text(
@@ -416,7 +452,7 @@ const injection: Flow = (turn) => {
 
 const unclear: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
-    return tools(decision("outro", "baixa", "Não entendi o pedido.", []));
+    return tools(decision("outro", "baixa", "Não ficou claro o que a pessoa precisa.", []));
   }
   if (/confianca foi baixa/.test(normalize(turn.system))) {
     return text("Ainda não consegui entender. Quer que eu chame um analista para te ajudar?");

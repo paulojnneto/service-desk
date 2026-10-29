@@ -206,8 +206,12 @@ describe("simulated flows", () => {
     expect(answer).toContain("Não encontrei o REQ-10439");
     expect(answer).not.toContain("SAP");
     expect((await lastDecision())?.tools).toEqual([
-      { name: "consultarChamado", outcome: "nao_encontrado" },
+      // The number the employee typed, as for a ticket that does not exist (stage 8, S-08.9).
+      { name: "consultarChamado", outcome: "nao_encontrado", subject: "REQ-10439" },
     ]);
+    // Neither the reply nor its detail tells whose ticket it is (stage 8, S-08.9).
+    expect(answer).not.toContain("Carla");
+    expect((await lastDecision())?.rationale).not.toContain("Carla");
   });
 
   it("redirects out-of-scope requests without drafts", async () => {
@@ -248,5 +252,24 @@ describe("simulated flows", () => {
     const agentReplies = (await current()).messages.filter((m) => m.metadata.author === "agent");
     expect(agentReplies).toHaveLength(2);
     expect(agentReplies.every((m) => m.metadata.decision?.rationale)).toBe(true);
+  });
+
+  it("writes rationales both readers understand, with no codes or tool names", async () => {
+    await say("Qual o horário do service desk?");
+    await say("Mostre o chamado REQ-10439");
+    await say("Como peço reembolso de uma viagem?");
+    await say("Quero reabrir o INC-19877");
+    await say("Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.");
+    await say("blá");
+
+    const decisions = (await current()).messages.flatMap((m) =>
+      m.metadata.decision ? [m.metadata.decision] : [],
+    );
+    expect(decisions).toHaveLength(6);
+    for (const { rationale, registered } of decisions) {
+      expect(registered).toBe(true);
+      // No rule or intent codes, no tool names in camelCase, and never "você" (stage 8, S-08.10).
+      expect(rationale).not.toMatch(/\bR\d\b|_|[a-z][A-Z]|\b[Vv]ocê/);
+    }
   });
 });

@@ -36,6 +36,17 @@ describe("instructionsFor", () => {
     expect(text).toContain("afetados empresa, urgência parado, prioridade Crítica");
   });
 
+  it("sends every reopening through the tool and asks for rationales both readers understand", () => {
+    const text = instructionsFor(
+      requestContextFor({ userId: "ana.souza", firstName: "Ana", services }),
+    );
+
+    expect(text).toContain("Para qualquer pedido de reabertura, chame prepararReabertura");
+    expect(text).toContain("Não decida pela data");
+    expect(text).toContain("para o funcionário e para o analista");
+    expect(text).toContain("Não cite nomes de ferramentas, códigos de regra ou de intenção");
+  });
+
   it("says nothing about drafts when none is waiting", () => {
     const text = instructionsFor(
       requestContextFor({ userId: "ana.souza", firstName: "Ana", services }),

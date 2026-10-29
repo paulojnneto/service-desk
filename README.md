@@ -30,12 +30,12 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with a sample email and **any password**:
 
-| Who                   | Email                     | Lands on                         |
-| --------------------- | ------------------------- | -------------------------------- |
-| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                 |
-| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst area (console later) |
+| Who                   | Email                     | Lands on                                                                                                         |
+| --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                                                                                                 |
+| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst area (console later); `GET /api/analyst/conversations/:id` reads any conversation with its decisions |
 
-The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did. Reload the page or sign in again later: the conversation, the choices made and the state of each draft are still there.
+The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or sign in again later: the conversation, the choices made and the state of each draft are still there.
 
 ### Flows to try (simulated mode, as Ana)
 
@@ -133,7 +133,36 @@ Each message goes to a Mastra agent (`packages/agent`) with instructions in Port
 - **Privacy (R7).** The requester always comes from the session; the ticket service answers "not found" for someone else's ticket, and the ticket picker keeps only the employee's open tickets, looked up as them.
 - **Priority (R9).** The model gathers who is affected and the urgency; `priorityFor` in `@nexo/shared` turns them into the priority, and the draft shows the deadline in business hours.
 - **Duplicates (R4)** and **reopening (R5).** Every creation draft checks the employee's open tickets and lists those of the same category; reopening is only offered within 7 days of resolution.
-- **Decision record.** Every reply stores intent, action, confidence, rationale, rules and tools in the `decisions` table. Intent, confidence, rationale and rules come from `registrarDecisao`; the action and the tools come from what actually ran, so the record never claims something that did not happen. A missing call is stored as such, with low confidence.
+- **Decision record.** Every reply stores intent, action, confidence, rationale, rules and tools in the `decisions` table, and sends the same record with the reply as it ends. Intent, confidence, rationale and the rules the agent applied come from `registrarDecisao`; the action, the tools (each with one short subject, such as the ticket number) and the rules guaranteed by the system come from what actually ran, so the record never claims something that did not happen. A missing call is stored as such, with low confidence. Replies written after Confirmar or Cancelar carry a record written by the server.
+
+### Reading a decision
+
+"Por quê?" at the end of each reply's action line opens its decision, in Portuguese, for the employee and, in the same words, for the analyst:
+
+| Part                    | What it says                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Entendeu                | What the person wants ("Quer reabrir um chamado")                                                |
+| Fez                     | The most important thing that happened ("Explicou por que o chamado não pode ser reaberto")      |
+| Confiança               | Alta, média or baixa, with what the level means. Média and baixa also show on the closed control |
+| Por quê                 | The agent's rationale: one or two neutral sentences, with no tool names or codes                 |
+| Como                    | Each tool with what it touched and its outcome ("Consultou o REQ-10439 · não encontrado")        |
+| Garantidas pelo sistema | The Annex A rules the code that ran enforced, whatever the model wrote                           |
+| Aplicadas pelo agente   | The other rules the agent cited                                                                  |
+
+The rules guaranteed by the system, in `ENFORCED_RULES` (`@nexo/shared`):
+
+| What ran                                                     | Rules                         |
+| ------------------------------------------------------------ | ----------------------------- |
+| Listing or reading the employee's tickets, the ticket picker | R7                            |
+| Reading a ticket                                             | R9 (its deadline)             |
+| A creation draft                                             | R3, R4, R9                    |
+| A draft adding information                                   | R3, R7                        |
+| A reopening draft / a refused reopening                      | R3, R5, R7 / R5, R7           |
+| The handoff                                                  | R6                            |
+| An out-of-scope request with nothing written                 | R8                            |
+| Confirmar (create / update / reopen) or Cancelar             | R3, R4, R9 / R3 / R3, R5 / R3 |
+
+A reply written by the server says so instead of showing a model's confidence; a reply the model did not register says "O agente não registrou a decisão". Try it with "Quero reabrir o INC-19877" (R5 guaranteed), "Mostre o chamado REQ-10439" (not found, nothing about its owner) or "blá" (confiança baixa).
 
 The agent asks a clarifying question when its confidence is low, and offers an analyst if it stays low. Out-of-scope requests (RH, Financeiro, Facilities) go to fixed channels in `@nexo/shared`. Each turn runs at most 6 steps.
 

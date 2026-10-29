@@ -263,6 +263,37 @@ describe("chat route", () => {
     expect(params.requestContext.get("userId")).toBe("bruno.tavares");
   });
 
+  it("sends the decision record before finish, the same one that is stored", async () => {
+    const cookie = await cookieFor("ana.souza@nexo.com.br");
+    const events = parseEvents(await (await send(cookie, "m1")).text());
+
+    // The last two events: the record as message metadata, then finish (stage 8, S-08.4).
+    expect(events.at(-1)?.type).toBe("finish");
+    const metadata = events.at(-2);
+    expect(metadata?.type).toBe("message-metadata");
+    expect(metadata?.messageMetadata).toMatchObject({
+      author: "agent",
+      decision: { action: "respondeu_central", source: "agent", registered: true },
+    });
+
+    await storedCount("ana.souza", 2);
+    const res = await app.request("/api/conversations/current", { headers: { cookie } });
+    const { conversation } = (await res.json()) as {
+      conversation: { messages: { metadata: Record<string, unknown> }[] };
+    };
+    expect(conversation.messages.at(-1)?.metadata).toEqual(metadata?.messageMetadata);
+  });
+
+  it("sends no record and saves nothing when the reply fails", async () => {
+    const cookie = await cookieFor("ana.souza@nexo.com.br");
+    const failing = await createTestApp({ db, runAgent: brokenReply });
+    const events = parseEvents(await (await send(cookie, "m1", "oi", failing.app)).text());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(events.some((e) => e.type === "message-metadata")).toBe(false);
+    expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
+  });
+
   it("saves the reply even when the browser stops reading mid-reply", async () => {
     const cookie = await cookieFor("ana.souza@nexo.com.br");
     const res = await send(cookie, "m1");
@@ -308,7 +339,12 @@ describe("buildChatParams", () => {
   });
 });
 
-type StreamEvent = { type: string; toolName?: string; delta?: string };
+type StreamEvent = {
+  type: string;
+  toolName?: string;
+  delta?: string;
+  messageMetadata?: Record<string, unknown>;
+};
 
 // Reads the server-sent events of a UI message stream ("data: {...}" lines).
 function parseEvents(body: string): StreamEvent[] {
