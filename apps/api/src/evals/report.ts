@@ -1,4 +1,4 @@
-import { ACTION_LABELS, INTENT_LABELS } from "@nexo/shared";
+import { ACTION_LABELS, estimateCost, INTENT_LABELS, PRICES_READ_ON } from "@nexo/shared";
 import type { Scenario, ScenarioResult, TurnResult } from "./types";
 
 // What a run shows (stage 10 PRD, S-10.6, S-10.7 and S-10.9): one line per scenario, then
@@ -65,6 +65,14 @@ function totals(summaries: ScenarioSummary[]) {
 }
 
 const number = (n: number) => n.toLocaleString("en-US");
+// The estimated cost in US$ (stage 11 PRD, S-11.5), or "—" for a model without a price.
+const dollars = (
+  model: string,
+  usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number },
+) => {
+  const cost = estimateCost(model, usage);
+  return cost === null ? "—" : `US$ ${cost.toFixed(4)}`;
+};
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const percent = (part: number, whole: number) =>
@@ -92,7 +100,7 @@ export function consoleReport(results: ScenarioResult[], info: RunInfo): string 
         `${s.passed === s.runs ? "✓" : "✗"} ${s.scenario.name.padEnd(width)}  ${rate(s).padEnd(11)} ${s.checks.passed}/${s.checks.total} checks · ${plural(s.turns, "turn")} · ${seconds(s.durationMs)}`,
     ),
     "",
-    `${total.fullyPassed}/${total.scenarios} scenarios passed every run (${percent(total.passedRuns, total.runs)} of runs) · ${total.modelCalls} model calls · ${number(total.inputTokens)} input tokens (${number(total.cachedInputTokens)} cached) · ${number(total.outputTokens)} output tokens · ${seconds(total.durationMs)}`,
+    `${total.fullyPassed}/${total.scenarios} scenarios passed every run (${percent(total.passedRuns, total.runs)} of runs) · ${total.modelCalls} model calls · ${number(total.inputTokens)} input tokens (${percent(total.cachedInputTokens, total.inputTokens)} cached) · ${number(total.outputTokens)} output tokens · ${dollars(info.model, total)} · ${seconds(total.durationMs)}`,
   ];
   const failures = failureBlocks(results);
   if (failures.length > 0) lines.push("", "Failures", "", ...failures.flatMap((f) => [...f, ""]));
@@ -106,13 +114,13 @@ export function markdownReport(results: ScenarioResult[], info: RunInfo): string
   const total = totals(summaries);
   const rows = summaries.map(
     (s) =>
-      `| \`${s.scenario.name}\` | ${s.scenario.title} | ${s.scenario.covers.join(", ") || "—"} | ${s.passed === s.runs ? "✓" : "✗"} ${rate(s)} | ${s.checks.passed}/${s.checks.total} | ${s.modelCalls} | ${number(s.inputTokens)} (${number(s.cachedInputTokens)}) | ${number(s.outputTokens)} | ${seconds(s.durationMs)} |`,
+      `| \`${s.scenario.name}\` | ${s.scenario.title} | ${s.scenario.covers.join(", ") || "—"} | ${s.passed === s.runs ? "✓" : "✗"} ${rate(s)} | ${s.checks.passed}/${s.checks.total} | ${s.modelCalls} | ${number(s.inputTokens)} (${number(s.cachedInputTokens)}) | ${number(s.outputTokens)} | ${dollars(info.model, s)} | ${seconds(s.durationMs)} |`,
   );
   const failures = failureBlocks(results);
   return [
     `# Evals: ${info.model}, ${info.date}`,
     "",
-    `${total.fullyPassed} of ${total.scenarios} scenarios passed every run (${percent(total.passedRuns, total.runs)} of ${total.runs} runs, ${info.repeat} per scenario). ${total.modelCalls} model calls, ${number(total.inputTokens)} input tokens (${number(total.cachedInputTokens)} cached), ${number(total.outputTokens)} output tokens, ${seconds(total.durationMs)}.`,
+    `${total.fullyPassed} of ${total.scenarios} scenarios passed every run (${percent(total.passedRuns, total.runs)} of ${total.runs} runs, ${info.repeat} per scenario). ${total.modelCalls} model calls, ${number(total.inputTokens)} input tokens (${number(total.cachedInputTokens)} cached, ${percent(total.cachedInputTokens, total.inputTokens)}), ${number(total.outputTokens)} output tokens, estimated cost ${dollars(info.model, total)} at the prices read on ${PRICES_READ_ON}, ${seconds(total.durationMs)}.`,
     "",
     "Run with `pnpm eval --model " +
       info.model +
@@ -120,8 +128,8 @@ export function markdownReport(results: ScenarioResult[], info: RunInfo): string
       (info.repeat > 1 ? ` --repeat ${info.repeat}` : "") +
       "`. The scenarios and what each turn must decide are in `apps/api/src/evals/scenarios.ts`.",
     "",
-    "| Scenario | What | Covers | Result | Checks | Model calls | Input tokens (cached) | Output tokens | Time |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Scenario | What | Covers | Result | Checks | Model calls | Input tokens (cached) | Output tokens | Cost | Time |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows,
     "",
     "## Failures",
