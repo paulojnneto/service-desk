@@ -296,6 +296,11 @@ describe("chat route", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(events.some((e) => e.type === "message-metadata")).toBe(false);
+    // The model's own message ("model overloaded") does not reach the browser.
+    expect(events.find((e) => e.type === "error")).toEqual({
+      type: "error",
+      errorText: "unavailable",
+    });
     expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
   });
 
@@ -526,6 +531,7 @@ type StreamEvent = {
   toolName?: string;
   delta?: string;
   messageMetadata?: Record<string, unknown>;
+  errorText?: string;
 };
 
 // Reads the server-sent events of a UI message stream ("data: {...}" lines).

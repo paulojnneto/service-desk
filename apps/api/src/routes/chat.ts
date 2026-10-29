@@ -318,7 +318,14 @@ export const chatRoutes = new Hono<AppEnv>()
     const watched = reply.pipeThrough(
       new TransformStream<UIMessageChunk, UIMessageChunk>({
         transform(chunk, controller) {
-          if (chunk.type === "error") failed = true;
+          if (chunk.type === "error") {
+            failed = true;
+            // The provider's message stays in the log; the browser gets a plain code, so no
+            // detail of the model or its account reaches it (stage 11 security review).
+            logError("The agent's reply failed:", chunk.errorText);
+            controller.enqueue({ type: "error", errorText: "unavailable" });
+            return;
+          }
           controller.enqueue(chunk);
         },
         flush() {
