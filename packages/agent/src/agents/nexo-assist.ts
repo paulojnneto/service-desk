@@ -36,10 +36,15 @@ export const nexoAssist = new Agent<"nexo-assist", typeof nexoTools, undefined, 
   instructions: ({ requestContext }) => instructionsFor(requestContext),
   model: resolveModel(),
   tools: nexoTools,
-  defaultOptions: {
+  // Per request, so the usage reaches the request that spent it (stage 11 tech spec).
+  defaultOptions: ({ requestContext }) => ({
     // The longest flow fits; a loop cannot run up cost (N10).
     maxSteps: 6,
-    // Tokens and model calls of the turn, for the evals and the cost estimate (stage 10).
-    onFinish: ({ totalUsage, steps }) => reportUsage(usageOf(totalUsage, steps.length)),
-  },
+    // Tokens and model calls of the turn: stored with the reply, and reported to the evals.
+    onFinish: ({ totalUsage, steps }) => {
+      const usage = usageOf(totalUsage, steps.length);
+      requestContext.get("recordUsage")?.(usage);
+      reportUsage(usage);
+    },
+  }),
 });

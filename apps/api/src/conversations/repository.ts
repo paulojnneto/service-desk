@@ -34,6 +34,17 @@ export type MessageRow = typeof messages.$inferSelect;
 export type DecisionRow = typeof decisions.$inferSelect;
 export type HandoffRow = typeof handoffs.$inferSelect;
 
+// The model's usage for an agent reply, stored with its decision (stage 11 PRD, S-11.1).
+export type ReplyUsage = {
+  model: string;
+  modelCalls: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  costUsd: number | null;
+};
+
 export type AppendResult =
   { status: "saved" | "duplicate"; conversation: ConversationRow } | { status: "limit_reached" };
 
@@ -132,6 +143,7 @@ export async function appendMessage(
     authorId?: string;
     parts: unknown[];
     decision?: DecisionRecord;
+    usage?: ReplyUsage;
   },
   now: Date,
 ): Promise<MessageRow | null> {
@@ -159,6 +171,7 @@ export async function appendMessage(
         messageId: row.id,
         conversationId: open.id,
         ...message.decision,
+        ...message.usage,
         createdAt: now,
       });
     }

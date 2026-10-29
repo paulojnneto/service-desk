@@ -8,6 +8,7 @@ import {
   type DraftView,
   type Ticket,
 } from "@nexo/shared";
+import type { AgentUsage } from "./usage";
 
 // What the agent's tools can do, built by the API for one person and one conversation
 // (stage 6 tech spec). Tickets are read only: creating, updating and reopening happen only
@@ -51,6 +52,8 @@ export type NexoContext = {
   // The draft waiting for "Confirmar", with any change the employee made through "Editar"
   // (stage 7 tech spec, PRD clarification).
   waitingDraft?: DraftView;
+  // Receives the turn's model usage when it finishes, for this request only (stage 11).
+  recordUsage?: (usage: AgentUsage) => void;
 };
 
 export function requestContextFor(values: NexoContext): RequestContext<NexoContext> {
@@ -60,5 +63,6 @@ export function requestContextFor(values: NexoContext): RequestContext<NexoConte
   context.set("services", values.services);
   if (values.previousConfidence) context.set("previousConfidence", values.previousConfidence);
   if (values.waitingDraft) context.set("waitingDraft", values.waitingDraft);
+  if (values.recordUsage) context.set("recordUsage", values.recordUsage);
   return context;
 }

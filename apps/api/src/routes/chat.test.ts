@@ -297,6 +297,43 @@ describe("chat route", () => {
     expect((await stored("ana.souza")).map((r) => r.author)).toEqual(["employee"]);
   });
 
+  it("stores the turn's model, calls, tokens, duration and cost with its decision (stage 11)", async () => {
+    const cookie = await cookieFor("ana.souza@nexo.com.br");
+    await (await send(cookie, "m1")).text();
+
+    const rows = await storedCount("ana.souza", 2);
+    const [decision] = await listDecisions(db, rows[0]!.conversationId);
+    expect(decision).toMatchObject({
+      model: "mock",
+      modelCalls: 2,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    expect(decision?.durationMs).toEqual(expect.any(Number));
+  });
+
+  it("keeps each turn's usage apart when two run at once", async () => {
+    const [ana, bruno] = await Promise.all([
+      cookieFor("ana.souza@nexo.com.br"),
+      cookieFor("bruno.tavares@nexo.com.br"),
+    ]);
+    // VPN: the lookups, the Windows question, then the answer. Hours: the lookup, then the answer.
+    const read = async (res: Response | Promise<Response>) => (await res).text();
+    await Promise.all([
+      read(send(ana, "a1", "Meu notebook não conecta na VPN desde ontem. Aparece o erro 809.")),
+      read(send(bruno, "b1")),
+    ]);
+
+    const anaRows = await storedCount("ana.souza", 2);
+    const brunoRows = await storedCount("bruno.tavares", 2);
+    const [anaDecision] = await listDecisions(db, anaRows[0]!.conversationId);
+    const [brunoDecision] = await listDecisions(db, brunoRows[0]!.conversationId);
+    expect(anaDecision).toMatchObject({ action: "consultou_chamados", modelCalls: 3 });
+    expect(brunoDecision).toMatchObject({ action: "respondeu_central", modelCalls: 2 });
+  });
+
   it("reports the turn's model calls when it finishes (stage 10)", async () => {
     const reports: AgentUsage[] = [];
     const stop = onAgentUsage((usage) => reports.push(usage));

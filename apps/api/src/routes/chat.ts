@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { handleChatStream } from "@mastra/ai-sdk";
-import { buildDecisionRecord, mastra, requestContextFor, type AgentServices } from "@nexo/agent";
+import {
+  buildDecisionRecord,
+  mastra,
+  modelName,
+  requestContextFor,
+  type AgentServices,
+  type AgentUsage,
+} from "@nexo/agent";
 import {
   MAX_MESSAGE_LENGTH,
   MESSAGES_PER_SESSION,
   type Confidence,
+  estimateCost,
   type DecisionRecord,
   type DraftView,
   type Person,
@@ -62,7 +70,12 @@ export function buildChatParams(
   person: Person,
   services: AgentServices,
   // Confidence of the previous reply (S-06.15) and the draft waiting for "Confirmar" (stage 7).
-  extra: { previousConfidence?: Confidence; waitingDraft?: DraftView } = {},
+  // The turn's usage goes to recordUsage when it finishes (stage 11).
+  extra: {
+    previousConfidence?: Confidence;
+    waitingDraft?: DraftView;
+    recordUsage?: (usage: AgentUsage) => void;
+  } = {},
 ) {
   return {
     messages: history as unknown as UIMessage[],
@@ -72,6 +85,7 @@ export function buildChatParams(
       services,
       ...(extra.previousConfidence ? { previousConfidence: extra.previousConfidence } : {}),
       ...(extra.waitingDraft ? { waitingDraft: extra.waitingDraft } : {}),
+      ...(extra.recordUsage ? { recordUsage: extra.recordUsage } : {}),
     }),
   };
 }
@@ -83,6 +97,19 @@ export const runNexoAssist: RunAgent = (params) =>
   handleChatStream({ mastra, agentId: "nexo-assist", version: "v7", params }) as Promise<
     ReadableStream<UIMessageChunk>
   >;
+
+function replyUsage(usage: AgentUsage, durationMs: number) {
+  const model = modelName();
+  return {
+    model,
+    modelCalls: usage.steps,
+    inputTokens: usage.inputTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    outputTokens: usage.outputTokens,
+    durationMs,
+    costUsd: estimateCost(model, usage),
+  };
+}
 
 // The reply as the AI SDK assembles it from the chunks, or undefined if that fails.
 async function lastMessage(stream: ReadableStream<UIMessageChunk>) {
@@ -155,10 +182,19 @@ export const chatRoutes = new Hono<AppEnv>()
       conversationId: saved.conversation.id,
       now,
     });
+    // The usage of this turn only, even when other turns run at the same time (S-11.1).
+    let usage: AgentUsage | undefined;
+    const startedAt = now().getTime();
     let reply: ReadableStream<UIMessageChunk>;
     try {
       reply = await c.get("runAgent")(
-        buildChatParams(agentHistory, person, services, { previousConfidence, waitingDraft }),
+        buildChatParams(agentHistory, person, services, {
+          previousConfidence,
+          waitingDraft,
+          recordUsage: (turn) => {
+            usage = turn;
+          },
+        }),
       );
     } catch (error) {
       // The message stays saved; the UI's retry sends it again without counting it twice.
@@ -222,6 +258,7 @@ export const chatRoutes = new Hono<AppEnv>()
               author: "agent",
               parts: responseMessage.parts,
               decision: decision ?? buildDecisionRecord(responseMessage.parts),
+              ...(usage ? { usage: replyUsage(usage, finishedAt.getTime() - startedAt) } : {}),
             },
             finishedAt,
           );
