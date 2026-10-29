@@ -49,6 +49,7 @@ import {
   type LimitReached,
 } from "../limits";
 import { findWaitingDraft, toDraftView } from "../drafts/repository";
+import { logError } from "../log";
 
 // The client sends only the new message (stage 5 PRD, S-05.6). The history the agent
 // reads always comes from the database, so a client cannot invent past messages.
@@ -208,7 +209,7 @@ async function lastMessage(stream: ReadableStream<UIMessageChunk>) {
   try {
     for await (const message of readUIMessageStream({ stream })) last = message;
   } catch (error) {
-    console.error("Could not assemble the agent's reply:", error);
+    logError("Could not assemble the agent's reply:", error);
   }
   return last;
 }
@@ -245,7 +246,7 @@ export const chatRoutes = new Hono<AppEnv>()
       const draft = await findWaitingDraft(db, saved.conversation.id);
       waitingDraft = draft ? toDraftView(draft) : undefined;
     } catch (error) {
-      console.error("Could not save the message:", error);
+      logError("Could not save the message:", error);
       return c.json({ error: "unavailable" }, 503);
     }
 
@@ -276,7 +277,7 @@ export const chatRoutes = new Hono<AppEnv>()
         return await answerPastLimit(db, person.id, saved.conversation.id, reached, text, now());
       }
     } catch (error) {
-      console.error("Could not check the usage limits:", error);
+      logError("Could not check the usage limits:", error);
       return c.json({ error: "unavailable" }, 503);
     }
 
@@ -306,7 +307,7 @@ export const chatRoutes = new Hono<AppEnv>()
       );
     } catch (error) {
       // The message stays saved; the UI's retry sends it again without counting it twice.
-      console.error("The agent could not start:", error);
+      logError("The agent could not start:", error);
       return c.json({ error: "unavailable" }, 503);
     }
 
@@ -385,7 +386,7 @@ export const chatRoutes = new Hono<AppEnv>()
             finishedAt,
           );
         } catch (error) {
-          console.error("Could not save the agent's reply:", error);
+          logError("Could not save the agent's reply:", error);
         }
       },
     });

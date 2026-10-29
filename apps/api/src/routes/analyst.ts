@@ -32,6 +32,7 @@ import {
 import { toConversationView, toHandoffView, toStoredMessage } from "../conversations/to-ui";
 import type { Db } from "../db/connect";
 import { findWaitingDraft, listDrafts } from "../drafts/repository";
+import { logError } from "../log";
 
 const ConversationId = z.uuid();
 // The cursor of the updates: the highest message seq the screen already has.
@@ -74,7 +75,7 @@ export const analystRoutes = new Hono<AppEnv>()
         consoleList(summaries, { filter, query, analystId: c.get("person")!.id, ticketHits }),
       );
     } catch (error) {
-      console.error("Could not list the conversations:", error);
+      logError("Could not list the conversations:", error);
       return c.json({ error: "unavailable" }, 503);
     }
   })
@@ -113,7 +114,7 @@ export const analystRoutes = new Hono<AppEnv>()
         };
         return c.json(answer);
       } catch (error) {
-        console.error("Could not read the employee's tickets:", error);
+        logError("Could not read the employee's tickets:", error);
         return c.json({ error: "unavailable" }, 503);
       }
     }),
@@ -163,7 +164,7 @@ async function withConversation(
     if (!row) return c.json({ error: "not_found" }, 404);
     return await handler(db, row, c.get("person")!.id);
   } catch (error) {
-    console.error("Could not answer the analyst console:", error);
+    logError("Could not answer the analyst console:", error);
     return c.json({ error: "unavailable" }, 503);
   }
 }

@@ -12,6 +12,7 @@ import {
 import { findWaitingDraft, listDrafts } from "../drafts/repository";
 import { toConversationView, toStoredMessage } from "../conversations/to-ui";
 import { After } from "./analyst";
+import { logError } from "../log";
 
 // The employee's open conversation. No route takes a conversation id: it is always the
 // open one of the session's person, so another person's conversation cannot be named
@@ -34,7 +35,7 @@ export const conversationRoutes = new Hono<AppEnv>()
         conversation: toConversationView(open, rows, decisions, draft?.id ?? null, drafts),
       });
     } catch (error) {
-      console.error("Could not load the conversation:", error);
+      logError("Could not load the conversation:", error);
       return c.json({ error: "unavailable" }, 503);
     }
   })
@@ -59,7 +60,7 @@ export const conversationRoutes = new Hono<AppEnv>()
       };
       return c.json(updates);
     } catch (error) {
-      console.error("Could not read the conversation's updates:", error);
+      logError("Could not read the conversation's updates:", error);
       return c.json({ error: "unavailable" }, 503);
     }
   })
@@ -69,7 +70,7 @@ export const conversationRoutes = new Hono<AppEnv>()
       await closeOpenConversation(c.get("db"), c.get("person")!.id, c.get("now")());
       return c.body(null, 204);
     } catch (error) {
-      console.error("Could not close the conversation:", error);
+      logError("Could not close the conversation:", error);
       return c.json({ error: "unavailable" }, 503);
     }
   });
