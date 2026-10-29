@@ -72,15 +72,16 @@ If your machine uses another Node version globally (for example with nvm-windows
 
 ### Other commands
 
-| Command          | What it does                                     |
-| ---------------- | ------------------------------------------------ |
-| `pnpm test`      | Runs the tests of every package                  |
-| `pnpm lint`      | Lints every package                              |
-| `pnpm typecheck` | Type-checks every package                        |
-| `pnpm build`     | Builds the UI into `apps/web/dist`               |
-| `pnpm format`    | Formats the repository (`format:check` verifies) |
-| `pnpm db:down`   | Stops PostgreSQL (the data stays in the volume)  |
-| `pnpm db:seed`   | Resets the sample tickets and conversations      |
+| Command          | What it does                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `pnpm test`      | Runs the tests of every package                                                        |
+| `pnpm eval`      | Scores the agent's decisions (see [How quality was ensured](#how-quality-was-ensured)) |
+| `pnpm lint`      | Lints every package                                                                    |
+| `pnpm typecheck` | Type-checks every package                                                              |
+| `pnpm build`     | Builds the UI into `apps/web/dist`                                                     |
+| `pnpm format`    | Formats the repository (`format:check` verifies)                                       |
+| `pnpm db:down`   | Stops PostgreSQL (the data stays in the volume)                                        |
+| `pnpm db:seed`   | Resets the sample tickets and conversations                                            |
 
 ## Architecture
 
@@ -191,6 +192,71 @@ A reply written by the server says so instead of showing a model's confidence; a
 
 The agent asks a clarifying question when its confidence is low, and offers an analyst if it stays low. Out-of-scope requests (RH, Financeiro, Facilities) go to fixed channels in `@nexo/shared`. Each turn runs at most 6 steps.
 
+## How quality was ensured
+
+Unit, route and flow tests prove that the rules in code hold: confirmation, privacy, priority, duplicates, reopening, handoff. Whether the agent _decides_ well is measured separately, by evals.
+
+**What they check.** Thirteen reference conversations (`apps/api/src/evals/scenarios.ts`):
+
+- the nine of the product PRD: question, duplicate, reopening, VPN on Windows 11, out of scope, someone else's ticket, prompt injection, critical case, overdue ticket;
+- four cases earlier stages found fragile: a reopening within the window, a status question without a number, a request still unclear after a question, the agent after an analyst hands back.
+
+Each turn states what must and must not happen, read from the stored decision record and from the application's state, not from the wording:
+
+- intent, action and confidence;
+- tools called or not;
+- rules enforced by code;
+- the draft's type, category and priority;
+- the handoff and its reason;
+- tickets written or not.
+
+Where Annex A allows more than one right answer, the check accepts all of them. There is no LLM judge: the rules are about what was done, so they can be checked exactly.
+
+**How they run.** `pnpm eval` plays every conversation through the real application, in process:
+
+- the chat route, the agent, the tools, the drafts and the handoff;
+- a fresh in-memory database and the ticket service with the Annex B data.
+
+No database needs to be running, and nothing touches the development data.
+
+- **Simulated model:** the default, with no key and no cost. It runs in CI. The scripted model was written to follow the rules, so this run proves the harness, the rules in code and the scenarios, not the quality of a model's decisions.
+- **A real model, given explicitly:** `pnpm eval --model openai/gpt-5.5`. It checks the provider's key, prints the plan, and writes a report to `docs/evals/`. `--scenario <name>` runs a subset, and `--repeat <n>` gives a pass rate per scenario.
+
+A failure names the turn, the check, what was expected and what happened, and shows that turn's decision record:
+
+```
+✗ vpn-windows-11 · turn 2: "Windows 11. Só eu estou afetada e tenho reunião com cliente às 14h, preciso da VPN."
+  enforced R4: expected R4 · got R3, R9
+  Decision: abrir_chamado (Quer abrir um chamado) · preparou_rascunho (Montou um rascunho para confirmação) · confidence alta
+  Tools: prepararChamado (ok)
+  Rules: enforced R3, R9 · cited R1, R2, R3, R4, R9
+```
+
+**Results with GPT-5.5** (2026-10-29):
+
+| Run                                                      | Scenarios      | Model calls | Input tokens | Output tokens | Time  |
+| -------------------------------------------------------- | -------------- | ----------- | ------------ | ------------- | ----- |
+| [Full set](docs/evals/2026-10-29-gpt-5.5.md)             | 12 of 13       | 52          | 178,296      | 5,133         | 132 s |
+| [VPN scenario again](docs/evals/2026-10-29-gpt-5.5-2.md) | 1 of 1 (12/12) | 7           | 27,339       | 810           | 21 s  |
+
+The hard cases all passed:
+
+- a reopening refused through the tool, not from the dates;
+- an overdue ticket that offers an analyst before handing off;
+- a critical case handed off at once;
+- an unclear request offered an analyst, never handed off;
+- someone else's ticket answered as not found, with no trace of its owner;
+- a prompt injection that wrote nothing;
+- a duplicate turned into an update.
+
+The one failure was an expectation taken from the prototype rather than from Annex A: listing the tickets in the first VPN turn. The duplicate check did run, enforced in code, before the draft. The scenario was corrected and run again, and both reports are kept.
+
+What the runs also showed, for Stage 11:
+
+- about 4 model calls and 14,000 input tokens per conversation;
+- no cached tokens yet;
+- an R8 the model sometimes cites for no reason. The decision detail keeps it apart from the rules the code guarantees.
+
 ## Ticket service
 
 The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (`nexo_tickets`).
@@ -207,7 +273,7 @@ The simulated legacy system (`apps/tickets`), with its own PostgreSQL database (
 The model is set by `NEXO_AGENT_MODEL` in `apps/api/.env.local`:
 
 - `mock` or empty (default): the simulated model in `packages/agent/src/models`. A script follows the prototype's flows and decides which tools to call, and Mastra runs the real tools, so drafts, priority and duplicate checks are real. It is used to build the screens and to run the tests with no key and no cost.
-- A Mastra model router ID, such as `anthropic/claude-sonnet-5-5` (the reference during Stage 6), together with its key (for example `ANTHROPIC_API_KEY`).
+- A Mastra model router ID, such as `openai/gpt-5.5` (the reference since Stage 6), together with its key (for example `OPENAI_API_KEY`).
 
 The final model choice and its cost rationale come in Stage 11.
 
