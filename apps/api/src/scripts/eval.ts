@@ -45,8 +45,8 @@ if (scenarios.length === 0) {
 
 // A real model needs its provider's key ("openai/gpt-5.5" → OPENAI_API_KEY).
 if (!simulated) {
-  const provider = model.split("/")[0]!;
-  const key = `${provider.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_API_KEY`;
+  const { providerKeyName } = await import("@nexo/agent");
+  const key = providerKeyName(model)!;
   if (!process.env[key]) {
     console.error(`${key} is not set (apps/api/.env.local); the model ${model} cannot run.`);
     process.exit(1);

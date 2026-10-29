@@ -11,7 +11,7 @@ export {
   type NexoContext,
 } from "./context";
 export { buildDecisionRecord } from "./decision";
-export { modelName } from "./models";
+export { modelName, providerKeyName } from "./models";
 export { onAgentUsage, type AgentUsage } from "./usage";
 
 export const mastra = new Mastra({
