@@ -3,6 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { session, type AppEnv } from "./auth";
 import type { TicketsClient } from "@nexo/tickets-client";
 import type { Db } from "./db/connect";
+import { analystRoutes } from "./routes/analyst";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes, runNexoAssist, type RunAgent } from "./routes/chat";
 import { conversationRoutes } from "./routes/conversations";
@@ -41,6 +42,7 @@ export function createApp({
   app.route("/api/chat", chatRoutes);
   app.route("/api/conversations", conversationRoutes);
   app.route("/api/drafts", draftRoutes);
+  app.route("/api/analyst", analystRoutes);
 
   return app;
 }
