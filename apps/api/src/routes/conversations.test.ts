@@ -85,7 +85,7 @@ describe("GET /api/conversations/current", () => {
   it("survives a restart: a new app over the same database returns the same conversation", async () => {
     const { cookie } = await signIn(app, "ana.souza@nexo.com.br", true);
     await say(cookie, "m1", "antes de reiniciar");
-    await setConversationState(db, "ana.souza", "with_analyst", new Date());
+    await setConversationState(db, "ana.souza", "with_analyst", new Date(), "rafael.lima");
     const before = (await current(cookie)).body.conversation;
 
     const restarted = await createTestApp({ db });

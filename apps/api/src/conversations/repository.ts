@@ -2,11 +2,12 @@ import {
   MESSAGES_PER_SESSION,
   type ConversationState,
   type DecisionRecord,
+  type HandoffReason,
   type MessageAuthor,
 } from "@nexo/shared";
 import { and, asc, desc, eq, lt, ne, sql } from "drizzle-orm";
 import type { Db } from "../db/connect";
-import { conversations, decisions, messages } from "../db/schema";
+import { conversations, decisions, handoffs, messages } from "../db/schema";
 
 // Every read and write of the stored conversations. Each function takes the employee's
 // id from the session and filters by it, so another person's conversation never leaves
@@ -15,6 +16,7 @@ import { conversations, decisions, messages } from "../db/schema";
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type DecisionRow = typeof decisions.$inferSelect;
+export type HandoffRow = typeof handoffs.$inferSelect;
 
 export type AppendResult =
   { status: "saved" | "duplicate"; conversation: ConversationRow } | { status: "limit_reached" };
@@ -181,15 +183,65 @@ export async function closeOpenConversation(db: Db, employeeId: string, now: Dat
     .where(and(eq(conversations.employeeId, employeeId), isOpen));
 }
 
-// Changing the state belongs to the handoff (Stage 9); tests use it to pause the agent.
+// Tests use it to put a conversation in a state directly; the app goes through the handoff
+// and the console actions. "with_analyst" needs the analyst who holds it (stage 9).
 export async function setConversationState(
   db: Db,
   employeeId: string,
   state: ConversationState,
   now: Date,
+  holderId?: string,
 ) {
+  const held = state === "with_analyst";
   await db
     .update(conversations)
-    .set({ state, updatedAt: now, ...(state === "closed" ? { closedAt: now } : {}) })
+    .set({
+      state,
+      updatedAt: now,
+      holderId: held ? (holderId ?? null) : null,
+      heldSince: held ? now : null,
+      ...(state === "closed" ? { closedAt: now } : {}),
+    })
     .where(and(eq(conversations.employeeId, employeeId), isOpen));
+}
+
+// A system note, as the employee and the analyst read it (stage 9 PRD, S-09.12).
+export function noteParts(text: string): unknown[] {
+  return [{ type: "text", text }];
+}
+
+// The handoff (stage 9 PRD, S-09.1): the state, the record with the agent's summary and the
+// note, in one transaction, so a waiting conversation always has its summary. Only a
+// conversation with the agent can be handed off; otherwise nothing changes and it answers
+// false.
+export async function handOffConversation(
+  db: Db,
+  conversationId: string,
+  handoff: { reason: HandoffReason; summary: string; ticketNumber: string | null },
+  now: Date,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [moved] = await tx
+      .update(conversations)
+      .set({ state: "waiting_analyst", updatedAt: now })
+      .where(and(eq(conversations.id, conversationId), eq(conversations.state, "with_agent")))
+      .returning({ id: conversations.id });
+    if (!moved) return false;
+    await tx.insert(handoffs).values({ conversationId, ...handoff, createdAt: now });
+    await tx.insert(messages).values({
+      conversationId,
+      author: "system",
+      parts: noteParts("Conversa transferida para o service desk."),
+      createdAt: now,
+    });
+    return true;
+  });
+}
+
+export async function listHandoffs(db: Db, conversationId: string): Promise<HandoffRow[]> {
+  return db
+    .select()
+    .from(handoffs)
+    .where(eq(handoffs.conversationId, conversationId))
+    .orderBy(asc(handoffs.createdAt));
 }

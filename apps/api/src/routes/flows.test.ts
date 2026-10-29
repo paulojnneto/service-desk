@@ -142,6 +142,18 @@ describe("simulated flows", () => {
     const ticket = await tickets.as("ana.souza").get("INC-20311");
     expect(ticket.events?.at(-1)).toMatchObject({ kind: "transferred" });
     expect(ticket.events?.at(-1)?.message).toContain("[chamado_vencido]");
+    // The summary stays with the conversation, with a note before the reply (stage 9, S-09.1).
+    const stored = await queryRows<{ reason: string; ticket_number: string; summary: string }>(
+      db,
+      sql`select reason, ticket_number, summary from handoffs`,
+    );
+    expect(stored).toEqual([
+      expect.objectContaining({ reason: "chamado_vencido", ticket_number: "INC-20311" }),
+    ]);
+    const notes = (await current()).messages.filter((m) => m.metadata.author === "system");
+    expect(notes.map((m) => (m.parts[0] as { text: string }).text)).toEqual([
+      "Conversa transferida para o service desk.",
+    ]);
   });
 
   it("after an overdue ticket, 'Adicionar informação' leads to an update draft", async () => {

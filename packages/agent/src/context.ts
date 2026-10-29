@@ -25,7 +25,8 @@ export interface AgentServices {
     discard(): Promise<boolean>;
   };
   // The only write the model can trigger: transfer event and conversation state (S-06.12).
-  handoff(input: HandoffInput): Promise<void>;
+  // false when the conversation is no longer with the agent (stage 9).
+  handoff(input: HandoffInput): Promise<boolean>;
   now(): Date;
 }
 

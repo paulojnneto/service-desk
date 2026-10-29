@@ -16,11 +16,18 @@ export const transferirParaAnalista = createTool({
   }),
   execute: async ({ gatilho, resumo, numero }, context) => {
     try {
-      await servicesFrom(context).handoff({
+      const handedOff = await servicesFrom(context).handoff({
         trigger: gatilho,
         summary: resumo,
         ...(numero ? { ticketNumber: numero.trim().toUpperCase() } : {}),
       });
+      if (!handedOff) {
+        return {
+          transferido: false,
+          permitido: false,
+          motivo: "A conversa já está com o service desk.",
+        };
+      }
       return { transferido: true };
     } catch (error) {
       return failureOf(error);

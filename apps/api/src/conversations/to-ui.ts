@@ -1,6 +1,7 @@
 import {
   analystLevelLabel,
   findPersonById,
+  holderFor,
   MESSAGES_PER_SESSION,
   type ConversationState,
   type ConversationView,
@@ -56,8 +57,7 @@ export function toConversationView(
   return {
     id: conversation.id,
     state: conversation.state as ConversationState,
-    // Who holds it comes with the handoff columns (stage 9 tech spec, next commit).
-    holder: null,
+    holder: holderFor(conversation.holderId),
     employeeMessages: conversation.employeeMessages,
     limit: MESSAGES_PER_SESSION,
     startedAt: conversation.startedAt.toISOString(),

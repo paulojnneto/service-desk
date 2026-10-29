@@ -59,7 +59,7 @@ function fakeServices(tickets: Ticket[] = []) {
       }),
       discard: vi.fn(async () => true),
     },
-    handoff: vi.fn(async () => undefined),
+    handoff: vi.fn(async () => true),
     now: () => NOW,
   };
   const context = {
@@ -226,6 +226,19 @@ describe("transferirParaAnalista", () => {
       summary: "INC-20311 sem atualização há 6 dias.",
       ticketNumber: "INC-20311",
     });
+  });
+
+  it("refuses when the conversation is already with the service desk", async () => {
+    const { services, context } = fakeServices();
+    vi.mocked(services.handoff).mockResolvedValueOnce(false);
+
+    const result = await run(
+      transferirParaAnalista,
+      { gatilho: "pedido_do_funcionario", resumo: "Ana pediu um analista de novo." },
+      context,
+    );
+
+    expect(result).toMatchObject({ transferido: false, permitido: false });
   });
 });
 
