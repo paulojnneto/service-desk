@@ -407,12 +407,13 @@ export async function listConsoleConversations(db: Db, now: Date): Promise<Conve
     .orderBy(desc(conversations.updatedAt));
 }
 
+// The last thing a person or the agent said; system notes are not a preview.
 export async function lastMessages(db: Db, ids: string[]): Promise<Map<string, MessageRow>> {
   if (ids.length === 0) return new Map();
   const rows = await db
     .selectDistinctOn([messages.conversationId])
     .from(messages)
-    .where(inArray(messages.conversationId, ids))
+    .where(and(inArray(messages.conversationId, ids), ne(messages.author, "system")))
     .orderBy(messages.conversationId, desc(messages.seq));
   return new Map(rows.map((row) => [row.conversationId, row]));
 }
