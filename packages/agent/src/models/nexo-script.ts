@@ -63,6 +63,15 @@ function pickFlow(turn: Turn): Flow {
   if (/horario|plantao|que horas|funciona o service desk/.test(user)) return hours;
   if (/quem esta sendo afetado|consegue trabalhar/.test(turn.lastQuestion))
     return createFromAnswers;
+  // Windows 11 with who is affected and the urgency in the same answer: straight to the draft.
+  if (
+    /versao do windows/.test(turn.lastQuestion) &&
+    /windows 11|win 11/.test(user) &&
+    /so eu|minha equipe|meu time|toda a empresa/.test(user) &&
+    URGENCY_HINT.test(user)
+  ) {
+    return createFromAnswers;
+  }
   if (/vpn/.test(user) || (/versao do windows/.test(turn.lastQuestion) && /windows/.test(user))) {
     return vpn;
   }
@@ -546,13 +555,17 @@ const explainAgain: Flow = (turn) => {
 };
 
 // Back from the analyst (stage 9, S-09.11): the agent picks up from what the person said.
+// "Still not working" after the analyst tried something is a ticket to open.
 const resumeAfterAnalyst: Flow = (turn) => {
   if (!turn.results.has("registrarDecisao")) {
+    const stillBroken = /ainda (nao|esta)|continua|nao voltou|nao resolveu/.test(turn.user);
     return tools(
       decision(
-        "outro",
+        stillBroken ? "abrir_chamado" : "outro",
         "alta",
-        "A conversa voltou do analista; retomei a partir do que ele disse.",
+        stillBroken
+          ? "O analista tentou resolver e o problema continua; o próximo passo é um chamado."
+          : "A conversa voltou do analista; retomei a partir do que ele disse.",
         [],
       ),
     );
