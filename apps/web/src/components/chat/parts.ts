@@ -1,5 +1,7 @@
 import {
   ticketChoiceText,
+  toolLabel,
+  type MessageMetadata,
   type DraftView,
   type Priority,
   type QuestionView,
@@ -117,9 +119,23 @@ function numberIn(input: Record<string, unknown>): string {
 export type ActionLabel = { key: string; label: string; done: boolean };
 
 // The labels above a reply (S-07.10). A tool that did not finish well keeps only its first
-// label, so the line never claims a priority or a draft that was not made.
+// label, so the line never claims a priority or a draft that was not made. A reply the server
+// wrote after Confirm or Cancel has no tool parts: its record says what it did (stage 8 PRD,
+// S-08.7).
 export function actionLabels(message: UIMessage): ActionLabel[] {
-  return toolParts(message).flatMap((part) => {
+  const parts = toolParts(message);
+  const decision = (message.metadata as MessageMetadata | undefined)?.decision;
+  if (parts.length === 0 && decision?.source === "server") {
+    return decision.tools.map((tool, i) => {
+      const label = toolLabel(tool.name, tool.subject);
+      return {
+        key: `${message.id}-server-${i}`,
+        label: label.charAt(0).toLowerCase() + label.slice(1),
+        done: true,
+      };
+    });
+  }
+  return parts.flatMap((part) => {
     const name = getToolName(part);
     if (HIDDEN.has(name)) return [];
     const labels = LABELS[name]?.(inputOf(part)) ?? [name];

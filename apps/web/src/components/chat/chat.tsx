@@ -216,6 +216,7 @@ export function Chat({
   const cards: CardContext = {
     messages,
     busy: busy || limitReached || withServiceDesk,
+    replying: busy,
     onPick: send,
     drafts,
   };

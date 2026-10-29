@@ -77,6 +77,31 @@ describe("cardsOf", () => {
 });
 
 describe("actionLabels", () => {
+  it("names what the server did after Confirm or Cancel, from the record", () => {
+    const reply: UIMessage = {
+      id: "m-server",
+      role: "assistant",
+      parts: [{ type: "text", text: "Pronto! Abri o chamado INC-20312." }],
+      metadata: {
+        author: "agent",
+        createdAt: "2026-10-28T13:00:00Z",
+        decision: {
+          intent: "abrir_chamado",
+          action: "criou_chamado",
+          confidence: "alta",
+          rationale: "A pessoa confirmou o rascunho D-381.",
+          rules: [],
+          enforcedRules: ["R3", "R4", "R9"],
+          tools: [{ name: "criarChamado", outcome: "ok", subject: "INC-20312" }],
+          source: "server",
+          registered: true,
+        },
+      },
+    };
+
+    expect(actionLabels(reply).map((l) => l.label)).toEqual(["criou o INC-20312"]);
+  });
+
   it("names what was looked at, as in the prototype", () => {
     const message = agent(
       tool("consultarChamado", { numero: "INC-20311" }, { chamado: {} }),
