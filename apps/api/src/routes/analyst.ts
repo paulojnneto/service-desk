@@ -84,12 +84,13 @@ export const analystRoutes = new Hono<AppEnv>()
     withConversation(c, async (db, row) => c.json({ conversation: await analystView(db, row) })),
   )
   // What changed since the screen's last message (decision 1): every author, the state, the
-  // holder and the handoffs.
+  // holder, the handoffs and the conversation's ticket.
   .get("/conversations/:id/updates", (c) =>
     withConversation(c, async (db, row) => {
-      const [rows, handoffs] = await Promise.all([
+      const [rows, handoffs, ticketNumber] = await Promise.all([
         messagesAfter(db, row.id, After.parse(c.req.query("after"))),
         listHandoffs(db, row.id),
+        conversationTicket(db, row.id),
       ]);
       return c.json({
         conversationId: row.id,
@@ -97,6 +98,7 @@ export const analystRoutes = new Hono<AppEnv>()
         holder: holderFor(row.holderId),
         messages: rows.map((message) => toStoredMessage(message)),
         handoffs: handoffs.map(toHandoffView),
+        ticketNumber,
       });
     }),
   )
@@ -218,16 +220,18 @@ function refusal(c: C, row: ConversationRow | null, lost: string) {
 }
 
 async function analystView(db: Db, row: ConversationRow): Promise<AnalystConversationView> {
-  const [rows, decisions, draft, drafts, handoffs] = await Promise.all([
+  const [rows, decisions, draft, drafts, handoffs, ticketNumber] = await Promise.all([
     listMessages(db, row.id),
     listDecisions(db, row.id),
     findWaitingDraft(db, row.id),
     listDrafts(db, row.id),
     listHandoffs(db, row.id),
+    conversationTicket(db, row.id),
   ]);
   return {
     ...toConversationView(row, rows, decisions, draft?.id ?? null, drafts),
     employee: consoleEmployee(row.employeeId)!,
     handoffs: handoffs.map(toHandoffView),
+    ticketNumber,
   };
 }

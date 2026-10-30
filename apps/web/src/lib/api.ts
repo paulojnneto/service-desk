@@ -161,7 +161,10 @@ export async function fetchAnalystConversation(
   return (await readJson<{ conversation: AnalystConversationView }>(res)).conversation;
 }
 
-export type AnalystUpdates = ConversationUpdates & { handoffs: HandoffView[] };
+export type AnalystUpdates = ConversationUpdates & {
+  handoffs: HandoffView[];
+  ticketNumber: string | null;
+};
 
 export async function fetchAnalystUpdates(id: string, after: number): Promise<AnalystUpdates> {
   return readJson(

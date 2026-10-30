@@ -337,6 +337,8 @@ describe("POST take-over, the related ticket", () => {
       expect(tickets.related).toMatchObject({ number: "INC-20311", status: "em_andamento" });
       const ticket = await service.client.as("ana.souza").get("INC-20311");
       expect(ticket.events?.at(-1)?.message).toBe("Assumido por Rafael Lima");
+      const view = (await get(path(id), rafael)).body.conversation as AnalystConversationView;
+      expect(view.ticketNumber).toBe("INC-20311");
     } finally {
       await service.reseed();
     }
@@ -354,6 +356,8 @@ describe("POST take-over, the related ticket", () => {
 
       const tickets = (await get(path(id, "/tickets"), rafael)).body as unknown as ConsoleTickets;
       expect(tickets.related).toMatchObject({ number: "INC-20311", status: "em_andamento" });
+      // The fixture's draft has no fields, so the header's number is read from the updates.
+      expect((await get(path(id, "/updates?after=0"), rafael)).body.ticketNumber).toBe("INC-20311");
     } finally {
       await service.reseed();
     }

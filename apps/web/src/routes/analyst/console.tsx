@@ -128,7 +128,7 @@ export function ConsolePage() {
   }
   const { tickets, ticketsFailed, reloadTickets } = useTickets(
     conversationId,
-    conversation?.handoffs.at(-1)?.ticketNumber ?? null,
+    conversation?.ticketNumber ?? null,
     conversation?.holder?.id ?? null,
   );
 
@@ -251,6 +251,7 @@ function useConversation(id: string | null) {
               state: updates.state,
               holder: updates.holder,
               handoffs: updates.handoffs,
+              ticketNumber: updates.ticketNumber,
               messages: mergeUpdates(prev.view.messages, updates.messages),
             },
           }

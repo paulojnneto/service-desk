@@ -39,7 +39,7 @@ export function ConversationHistory({
 
   const badge = stateBadge(conversation.state, conversation.holder, analystId);
   const handoff = conversation.handoffs.at(-1);
-  const related = handoff?.ticketNumber;
+  const related = conversation.ticketNumber;
   const context = readOnlyContext(messages, conversation.drafts);
 
   return (

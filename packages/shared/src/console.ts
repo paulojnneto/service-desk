@@ -88,6 +88,8 @@ export type ConsoleList = {
 export type AnalystConversationView = ConversationView & {
   employee: ConsoleEmployee;
   handoffs: HandoffView[];
+  // The conversation's ticket: the latest one a handoff named or a confirmed draft wrote.
+  ticketNumber: string | null;
 };
 
 // The ticket panel (S-09.6): the related ticket first, then the employee's others.
