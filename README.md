@@ -6,7 +6,15 @@ Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
 ## Try it
 
-**You need:** Docker with Compose v2. On Windows and macOS, Docker Desktop must be open. Ports 8080 and 55432 must be free. Nothing else: no Node, no database, no key.
+### Requirements
+
+| To                                | You need                    | Version                                                                        |
+| --------------------------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| Try it (the steps below)          | Git, Docker with Compose v2 | Tested with Docker 29.8 and Compose v5.5; on Windows and macOS, Docker Desktop |
+| Check it automatically (optional) | Node                        | 22.13 or later 22.x (not 23)                                                   |
+| Develop (`pnpm dev`)              | Node, pnpm, Docker          | Node 22.13 or later 22.x; pnpm 10.33.1, installed by `corepack enable`         |
+
+To try it, nothing else is needed: no Node, no database, no key. Before starting, open Docker Desktop (Windows and macOS) and make sure ports 8080 and 55432 are free.
 
 ### 1. Start it
 
@@ -77,7 +85,7 @@ docker compose --profile app down
 ### Good to know
 
 - **What runs.** PostgreSQL, the ticket service (not reachable from outside the stack) and the API, which also serves the screens, only on this machine. It runs in production mode, so the session cookie is `Secure`: Chrome, Edge and Firefox accept it on `http://localhost`.
-- **Check it automatically.** With Node 22, `node scripts/smoke.mjs` checks the running stack: the screens, sign-in, one agent turn and the console.
+- **Check it automatically.** With Node 22.13 or later 22.x, `node scripts/smoke.mjs` checks the running stack: the screens, sign-in, one agent turn and the console.
 - **Mastra's warning.** At start, Mastra says it has no storage configured. Nothing depends on it: conversations, decisions and sessions live in PostgreSQL.
 - **Reload the page or come back another day:** the conversation, the choices made and the state of each draft are still there.
 
@@ -114,7 +122,7 @@ Sign in as Júlia at the same time to see that only the analyst who took a conve
 
 ## Run for development
 
-Requirements: Node 22 (see `.nvmrc`; with nvm-windows, `nvm use 22`), pnpm 10 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL).
+Requirements: Node 22.13 or later 22.x (see `.nvmrc`; with nvm-windows, `nvm use 22`), pnpm 10.33.1 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL). See [Requirements](#requirements).
 
 ```bash
 pnpm install
