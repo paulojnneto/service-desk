@@ -130,9 +130,11 @@ export const analystRoutes = new Hono<AppEnv>()
     }),
   )
   .post("/conversations/:id/hand-back", (c) =>
-    withConversation(c, async (db, row, me) =>
-      answer(c, db, await handBack(db, row.id, me, c.get("now")()), "not_holder"),
-    ),
+    withConversation(c, async (db, row, me) => {
+      const result = await handBack(db, row.id, me, c.get("now")());
+      if (result.status === "done") await releaseTicket(c, db, row);
+      return answer(c, db, result, "not_holder");
+    }),
   )
   .post("/conversations/:id/close", (c) =>
     withConversation(c, async (db, row, me) =>
@@ -183,6 +185,21 @@ async function takeOverTicket(c: C, db: Db, row: ConversationRow) {
       .takeOver(related, { analystId: analyst.id, analystName: analyst.name });
   } catch (error) {
     logError("Could not record the take-over on the ticket:", error);
+  }
+}
+
+// Handing back undoes that: the ticket waits for an analyst again, unless it was already being
+// worked on before the take-over (the ticket service checks).
+async function releaseTicket(c: C, db: Db, row: ConversationRow) {
+  const related = await conversationTicket(db, row.id);
+  if (!related) return;
+  try {
+    await c
+      .get("tickets")
+      .as(row.employeeId)
+      .release(related, { analystId: c.get("person")!.id });
+  } catch (error) {
+    logError("Could not record the hand-back on the ticket:", error);
   }
 }
 

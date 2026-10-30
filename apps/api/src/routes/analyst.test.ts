@@ -359,6 +359,21 @@ describe("POST take-over, the related ticket", () => {
     }
   });
 
+  it("puts the ticket back to aguardando analista on a hand back", async () => {
+    const { id, rafael } = await waitingConversation();
+    await db.execute(sql`update handoffs set ticket_number = 'INC-20311'`);
+    const service = await testTickets();
+    try {
+      await post(path(id, "/take-over"), rafael);
+      await post(path(id, "/hand-back"), rafael);
+
+      const tickets = (await get(path(id, "/tickets"), rafael)).body as unknown as ConsoleTickets;
+      expect(tickets.related).toMatchObject({ number: "INC-20311", status: "aguardando_analista" });
+    } finally {
+      await service.reseed();
+    }
+  });
+
   it("still takes the conversation over when the ticket service is down", async () => {
     const { id, rafael } = await waitingConversation();
     await db.execute(sql`update handoffs set ticket_number = 'INC-20311'`);
