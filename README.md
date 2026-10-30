@@ -6,26 +6,88 @@ Product requirements and the stage roadmap: [docs/prd.md](docs/prd.md).
 
 ## Try it
 
-Requirements: Docker with Compose v2. Nothing else.
+### Requirements
+
+| To                                | You need                    | Version                                                                        |
+| --------------------------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| Try it (the steps below)          | Git, Docker with Compose v2 | Tested with Docker 29.8 and Compose v5.5; on Windows and macOS, Docker Desktop |
+| Check it automatically (optional) | Node                        | 22.13 or later 22.x (not 23)                                                   |
+| Develop (`pnpm dev`)              | Node, pnpm, Docker          | Node 22.13 or later 22.x; pnpm 10.33.1, installed by `corepack enable`         |
+
+To try it, nothing else is needed: no Node, no database, no key. Before starting, open Docker Desktop (Windows and macOS) and make sure ports 8080 and 55432 are free.
+
+### 1. Start it
 
 ```bash
+git clone https://github.com/paulojnneto/service-desk.git
+cd service-desk
 docker compose --profile app up --build
 ```
 
-The first build takes a few minutes. Then open http://localhost:8080 and sign in with a sample email and **any password**:
+The first build takes a few minutes. It is ready when the log shows:
 
-| Who                   | Email                     | Lands on                                                                                             |
-| --------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Employee (Ana Souza)  | `ana.souza@nexo.com.br`   | The support chat                                                                                     |
-| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br` | The analyst console (Screens 4 and 5); Júlia Castro (`julia.castro@nexo.com.br`) is a second analyst |
+```
+Agent model: mock (simulated, no key needed)
+```
 
-The other sample people are in `packages/shared/src/directory.ts`. The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). Reload the page or come back another day: the conversation, the choices made and the state of each draft are still there.
+The first start creates the databases, the service keys and the sample data; later starts keep them.
 
-- **The model.** By default the stack uses the simulated model: no key, no cost, the same tools and rules. To use GPT-5.5, copy `.env.example` to `.env`, paste your OpenAI key and start again. The API's log says which model answers, and warns if the key is missing.
-- **What starts.** PostgreSQL, the ticket service (not reachable from outside the stack) and the API, which also serves the screens, only on this machine. The first start creates the databases, the keys and the sample data; later starts keep them. It runs in production mode, so the session cookie is `Secure`: Chrome, Edge and Firefox accept it on `http://localhost`.
-- **Check it.** With Node 22, `node scripts/smoke.mjs` (or `pnpm smoke`) checks the running stack: the screens, sign-in, one agent turn and the console.
-- **Stop it** with `docker compose --profile app down`. `down -v` erases the data too, including the development databases, which share the same PostgreSQL.
-- At start, Mastra warns that it has no storage configured. Nothing depends on it: conversations, decisions and sessions live in PostgreSQL.
+### 2. Sign in
+
+Open **http://localhost:8080** and sign in with a sample email and **any password**:
+
+| Who                   | Email                      | Lands on                                          |
+| --------------------- | -------------------------- | ------------------------------------------------- |
+| Employee (Ana Souza)  | `ana.souza@nexo.com.br`    | The support chat (Screens 2 and 3)                |
+| Analyst (Rafael Lima) | `rafael.lima@nexo.com.br`  | The analyst console (Screens 4 and 5)             |
+| Second analyst        | `julia.castro@nexo.com.br` | The console, to see that only one analyst answers |
+
+To be the employee and the analyst at once, use a normal and a private window (see [Both sides at once](#both-sides-at-once)). The line above each reply shows what the agent did; "Por quê?" at its end explains the decision (see [Reading a decision](#reading-a-decision)). The other sample people are in `packages/shared/src/directory.ts`.
+
+### 3. Use the real model (optional)
+
+Out of the box the agent runs on the **simulated model**: no key and no cost, with the same tools and rules, but it only understands the [flows below](#flows-to-try-simulated-model-as-ana). To talk to it freely, use **GPT-5.5** with your OpenAI key:
+
+1. In another terminal, in the `service-desk` folder, create `.env` from the example (git ignores it):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   In PowerShell: `Copy-Item .env.example .env`.
+
+2. Open `.env` and paste your key after `OPENAI_API_KEY=`. Leave `NEXO_AGENT_MODEL=openai/gpt-5.5` as it is.
+
+3. Apply it. The data and the sign-ins are kept:
+
+   ```bash
+   docker compose --profile app up -d
+   ```
+
+4. Check which model answers:
+
+   ```bash
+   docker compose --profile app logs api
+   ```
+
+   The log must show `Agent model: openai/gpt-5.5`. If it says `OPENAI_API_KEY is not set`, the key was not read: check step 2 and run step 3 again.
+
+A conversation costs about US$ 0.03, and the stack caps the spending at 40 agent turns per employee and US$ 5 a day (see [Model, cost and limits](#model-cost-and-limits)). To go back to the simulated model, delete `.env` and run step 3 again.
+
+### 4. Stop it
+
+```bash
+docker compose --profile app down
+```
+
+`down -v` erases the data too, including the databases of `pnpm dev`, which share the same PostgreSQL: the next start begins again with the sample data.
+
+### Good to know
+
+- **What runs.** PostgreSQL, the ticket service (not reachable from outside the stack) and the API, which also serves the screens, only on this machine. It runs in production mode, so the session cookie is `Secure`: Chrome, Edge and Firefox accept it on `http://localhost`.
+- **Check it automatically.** With Node 22.13 or later 22.x, `node scripts/smoke.mjs` checks the running stack: the screens, sign-in, one agent turn and the console.
+- **Mastra's warning.** At start, Mastra says it has no storage configured. Nothing depends on it: conversations, decisions and sessions live in PostgreSQL.
+- **Reload the page or come back another day:** the conversation, the choices made and the state of each draft are still there.
 
 ### Flows to try (simulated model, as Ana)
 
@@ -60,7 +122,7 @@ Sign in as Júlia at the same time to see that only the analyst who took a conve
 
 ## Run for development
 
-Requirements: Node 22 (see `.nvmrc`; with nvm-windows, `nvm use 22`), pnpm 10 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL).
+Requirements: Node 22.13 or later 22.x (see `.nvmrc`; with nvm-windows, `nvm use 22`), pnpm 10.33.1 (`corepack enable` installs the version set in `package.json`) and Docker (for PostgreSQL). See [Requirements](#requirements).
 
 ```bash
 pnpm install
