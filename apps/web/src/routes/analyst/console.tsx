@@ -9,7 +9,8 @@ import type {
 import { LogOut, MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Form, NavLink, useLoaderData, useParams } from "react-router";
-import { ConversationActions } from "../../components/console/conversation-actions";
+import { allowedActions } from "../../components/console/actions";
+import { ConversationActions, HeldActions } from "../../components/console/conversation-actions";
 import { ConversationHistory } from "../../components/console/conversation-history";
 import { ConversationList } from "../../components/console/conversation-list";
 import { TicketsPanel } from "../../components/console/tickets-panel";
@@ -128,7 +129,7 @@ export function ConsolePage() {
   }
   const { tickets, ticketsFailed, reloadTickets } = useTickets(
     conversationId,
-    conversation?.handoffs.at(-1)?.ticketNumber ?? null,
+    conversation?.ticketNumber ?? null,
     conversation?.holder?.id ?? null,
   );
 
@@ -175,6 +176,11 @@ export function ConsolePage() {
             conversation={conversation}
             analystId={user.id}
             onShowTickets={() => setTicketsOpen(true)}
+            headerActions={
+              allowedActions(conversation.state, conversation.holder, user.id).reply ? (
+                <HeldActions busy={busy} onAction={(action) => void act(action)} />
+              ) : undefined
+            }
             footer={
               <ConversationActions
                 conversation={conversation}
@@ -251,6 +257,7 @@ function useConversation(id: string | null) {
               state: updates.state,
               holder: updates.holder,
               handoffs: updates.handoffs,
+              ticketNumber: updates.ticketNumber,
               messages: mergeUpdates(prev.view.messages, updates.messages),
             },
           }

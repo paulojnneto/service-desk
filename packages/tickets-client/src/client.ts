@@ -1,4 +1,10 @@
-import { Article, Ticket, type CreateTicketInput, type TakeOverInput } from "@nexo/shared";
+import {
+  Article,
+  Ticket,
+  type CreateTicketInput,
+  type ReleaseInput,
+  type TakeOverInput,
+} from "@nexo/shared";
 import { z } from "zod";
 import { errorForStatus, TicketServiceError } from "./errors";
 import type { TokenSigner } from "./signer";
@@ -123,6 +129,13 @@ export function createTicketsClient(options: TicketsClientOptions) {
           ticket(
             "POST",
             `/tickets/${encodeURIComponent(number)}/take-over`,
+            analyst,
+            write?.idempotencyKey,
+          ),
+        release: (number: string, analyst: ReleaseInput, write?: WriteOptions) =>
+          ticket(
+            "POST",
+            `/tickets/${encodeURIComponent(number)}/release`,
             analyst,
             write?.idempotencyKey,
           ),

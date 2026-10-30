@@ -291,3 +291,40 @@ describe("take over", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("release", () => {
+  const rafael = { analystId: "rafael.lima", analystName: "Rafael Lima" };
+
+  it("undoes the analyst's take-over, keeping the deadline from it", async () => {
+    await insertTicket({ number: "INC-20311", lastUpdateAt: daysAgo(6) });
+    await as("ana.souza").post("/tickets/INC-20311/take-over", rafael);
+    now = new Date(NOW.getTime() + 60 * 60 * 1000);
+    const { res, json } = await as("ana.souza").post("/tickets/INC-20311/release", {
+      analystId: "rafael.lima",
+    });
+
+    expect(res.status).toBe(200);
+    expect(json.ticket.status).toBe("aguardando_analista");
+    expect(json.ticket.lastUpdateAt).toBe(NOW.toISOString());
+    expect(json.ticket.events?.at(-1)).toMatchObject({
+      kind: "status_changed",
+      message: "Devolvido ao Nexo Assist",
+    });
+  });
+
+  it("leaves a ticket another analyst was already working on", async () => {
+    await insertTicket({ number: "INC-20298", status: "em_andamento" });
+    await db.insert(ticketEvents).values({
+      ticketNumber: "INC-20298",
+      kind: "status_changed",
+      at: daysAgo(1),
+      authorId: "rafael.lima",
+      message: "Em andamento: pedido enviado ao dono da pasta.",
+    });
+    const { json } = await as("ana.souza").post("/tickets/INC-20298/release", {
+      analystId: "rafael.lima",
+    });
+
+    expect(json.ticket.status).toBe("em_andamento");
+  });
+});

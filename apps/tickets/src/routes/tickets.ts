@@ -1,6 +1,7 @@
 import {
   AddUpdateInput,
   CreateTicketInput,
+  ReleaseInput,
   ReopenInput,
   TakeOverInput,
   TransferInput,
@@ -72,6 +73,17 @@ export const ticketRoutes = new Hono<TicketsEnv>()
     const input = await parseBody(c, TakeOverInput);
     if (!input) return c.json({ error: "invalid_input" }, 400);
     const result = await repo(c).takeOver(
+      c.get("requesterId"),
+      c.req.param("number"),
+      input,
+      c.get("now")(),
+    );
+    return respond(c, result, 200);
+  })
+  .post("/:number/release", async (c) => {
+    const input = await parseBody(c, ReleaseInput);
+    if (!input) return c.json({ error: "invalid_input" }, 400);
+    const result = await repo(c).release(
       c.get("requesterId"),
       c.req.param("number"),
       input,

@@ -70,6 +70,8 @@ export const TakeOverInput = z.object({
   analystName: z.string().trim().min(1).max(120),
 });
 export type TakeOverInput = z.infer<typeof TakeOverInput>;
+export const ReleaseInput = z.object({ analystId: z.string().trim().min(1).max(120) });
+export type ReleaseInput = z.infer<typeof ReleaseInput>;
 
 export const Article = z.object({
   id: z.string(),

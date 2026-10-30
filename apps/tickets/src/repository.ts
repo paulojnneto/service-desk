@@ -4,6 +4,7 @@ import {
   isOpenStatus,
   isOverdue,
   type CreateTicketInput,
+  type ReleaseInput,
   type TakeOverInput,
   type Ticket,
   type TicketEvent,
@@ -171,6 +172,42 @@ export function ticketsRepository(db: Db) {
       const [updated] = await db
         .update(tickets)
         .set({ status: "em_andamento", lastUpdateAt: now })
+        .where(eq(tickets.number, number))
+        .returning();
+      return withEvents(updated!, now);
+    },
+
+    // The analyst handed the conversation back to the agent: the ticket waits again. Only a
+    // take-over by this analyst is undone, so a ticket an analyst was already working on
+    // stays "em andamento". The deadline keeps counting from the take-over.
+    async release(
+      requesterId: string,
+      number: string,
+      analyst: ReleaseInput,
+      now: Date,
+    ): Promise<Ticket | WriteError> {
+      const row = await find(requesterId, number);
+      if (!row) return "not_found";
+      const [lastChange] = await db
+        .select()
+        .from(ticketEvents)
+        .where(and(eq(ticketEvents.ticketNumber, number), eq(ticketEvents.kind, "status_changed")))
+        .orderBy(desc(ticketEvents.at), desc(ticketEvents.id))
+        .limit(1);
+      const takenByThem =
+        lastChange?.authorId === analyst.analystId &&
+        lastChange.message?.startsWith("Assumido por ");
+      if (row.status !== "em_andamento" || !takenByThem) return withEvents(row, now);
+
+      await addEvent(number, {
+        kind: "status_changed",
+        at: now,
+        authorId: analyst.analystId,
+        message: "Devolvido ao Nexo Assist",
+      });
+      const [updated] = await db
+        .update(tickets)
+        .set({ status: "aguardando_analista" })
         .where(eq(tickets.number, number))
         .returning();
       return withEvents(updated!, now);

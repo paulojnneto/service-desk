@@ -84,12 +84,13 @@ export const analystRoutes = new Hono<AppEnv>()
     withConversation(c, async (db, row) => c.json({ conversation: await analystView(db, row) })),
   )
   // What changed since the screen's last message (decision 1): every author, the state, the
-  // holder and the handoffs.
+  // holder, the handoffs and the conversation's ticket.
   .get("/conversations/:id/updates", (c) =>
     withConversation(c, async (db, row) => {
-      const [rows, handoffs] = await Promise.all([
+      const [rows, handoffs, ticketNumber] = await Promise.all([
         messagesAfter(db, row.id, After.parse(c.req.query("after"))),
         listHandoffs(db, row.id),
+        conversationTicket(db, row.id),
       ]);
       return c.json({
         conversationId: row.id,
@@ -97,6 +98,7 @@ export const analystRoutes = new Hono<AppEnv>()
         holder: holderFor(row.holderId),
         messages: rows.map((message) => toStoredMessage(message)),
         handoffs: handoffs.map(toHandoffView),
+        ticketNumber,
       });
     }),
   )
@@ -130,9 +132,11 @@ export const analystRoutes = new Hono<AppEnv>()
     }),
   )
   .post("/conversations/:id/hand-back", (c) =>
-    withConversation(c, async (db, row, me) =>
-      answer(c, db, await handBack(db, row.id, me, c.get("now")()), "not_holder"),
-    ),
+    withConversation(c, async (db, row, me) => {
+      const result = await handBack(db, row.id, me, c.get("now")());
+      if (result.status === "done") await releaseTicket(c, db, row);
+      return answer(c, db, result, "not_holder");
+    }),
   )
   .post("/conversations/:id/close", (c) =>
     withConversation(c, async (db, row, me) =>
@@ -186,6 +190,21 @@ async function takeOverTicket(c: C, db: Db, row: ConversationRow) {
   }
 }
 
+// Handing back undoes that: the ticket waits for an analyst again, unless it was already being
+// worked on before the take-over (the ticket service checks).
+async function releaseTicket(c: C, db: Db, row: ConversationRow) {
+  const related = await conversationTicket(db, row.id);
+  if (!related) return;
+  try {
+    await c
+      .get("tickets")
+      .as(row.employeeId)
+      .release(related, { analystId: c.get("person")!.id });
+  } catch (error) {
+    logError("Could not record the hand-back on the ticket:", error);
+  }
+}
+
 async function answer(c: C, db: Db, result: ConsoleActionResult, lost: string) {
   if (result.status === "done") {
     return c.json({ conversation: await analystView(db, result.conversation) });
@@ -201,16 +220,18 @@ function refusal(c: C, row: ConversationRow | null, lost: string) {
 }
 
 async function analystView(db: Db, row: ConversationRow): Promise<AnalystConversationView> {
-  const [rows, decisions, draft, drafts, handoffs] = await Promise.all([
+  const [rows, decisions, draft, drafts, handoffs, ticketNumber] = await Promise.all([
     listMessages(db, row.id),
     listDecisions(db, row.id),
     findWaitingDraft(db, row.id),
     listDrafts(db, row.id),
     listHandoffs(db, row.id),
+    conversationTicket(db, row.id),
   ]);
   return {
     ...toConversationView(row, rows, decisions, draft?.id ?? null, drafts),
     employee: consoleEmployee(row.employeeId)!,
     handoffs: handoffs.map(toHandoffView),
+    ticketNumber,
   };
 }
