@@ -14,6 +14,7 @@ import { consoleList, summarize } from "../conversations/console";
 import {
   appendAnalystMessage,
   closeByAnalyst,
+  conversationTicket,
   conversationsMentioning,
   findConversationById,
   handBack,
@@ -103,7 +104,7 @@ export const analystRoutes = new Hono<AppEnv>()
   // checks, and only the conversation's employee can be read (decision 7).
   .get("/conversations/:id/tickets", (c) =>
     withConversation(c, async (db, row) => {
-      const related = await relatedTicket(db, row.id);
+      const related = await conversationTicket(db, row.id);
       try {
         const tickets = await c.get("tickets").as(row.employeeId).list("all");
         const answer: ConsoleTickets = {
@@ -168,16 +169,11 @@ async function withConversation(
   }
 }
 
-// The ticket of the latest handoff that named one.
-async function relatedTicket(db: Db, conversationId: string) {
-  return (await listHandoffs(db, conversationId)).findLast((h) => h.ticketNumber)?.ticketNumber;
-}
-
-// The handoff's ticket moves to "em andamento" in the ticket service, as the employee: the
+// The conversation's ticket moves to "em andamento" in the ticket service, as the employee: the
 // service keeps its R7 checks. As with the handoff's transfer event, the conversation is
 // already the analyst's: if the ticket service is down, that is only logged.
 async function takeOverTicket(c: C, db: Db, row: ConversationRow) {
-  const related = await relatedTicket(db, row.id);
+  const related = await conversationTicket(db, row.id);
   if (!related) return;
   const analyst = c.get("person")!;
   try {
