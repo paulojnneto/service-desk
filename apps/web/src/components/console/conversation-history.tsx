@@ -24,11 +24,14 @@ export function ConversationHistory({
   conversation,
   analystId,
   footer,
+  headerActions,
   onShowTickets,
 }: {
   conversation: AnalystConversationView;
   analystId: string;
   footer?: React.ReactNode;
+  // In place of the state badge, while this analyst holds the conversation (Screen 5).
+  headerActions?: React.ReactNode;
   onShowTickets?: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -65,12 +68,14 @@ export function ConversationHistory({
             {related && ` · ${related}`}
           </p>
         </div>
-        <span
-          className={`hidden items-center gap-1.5 rounded-full bg-desk px-3 py-1.5 text-[12.5px] font-semibold sm:flex ${TONE_TEXT[badge.tone]}`}
-        >
-          <span aria-hidden="true" className={`size-1.5 rounded-full ${TONE_DOT[badge.tone]}`} />
-          {badge.text}
-        </span>
+        {headerActions ?? (
+          <span
+            className={`hidden items-center gap-1.5 rounded-full bg-desk px-3 py-1.5 text-[12.5px] font-semibold sm:flex ${TONE_TEXT[badge.tone]}`}
+          >
+            <span aria-hidden="true" className={`size-1.5 rounded-full ${TONE_DOT[badge.tone]}`} />
+            {badge.text}
+          </span>
+        )}
         {onShowTickets && (
           <button
             type="button"

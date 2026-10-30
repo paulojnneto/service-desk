@@ -44,19 +44,8 @@ export function ConversationActions({
       </Notice>
     );
   } else if (allowed.reply) {
-    body = (
-      <>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <ActionButton busy={busy === "hand-back"} onClick={() => onAction("hand-back")}>
-            <Bot className="size-4" aria-hidden="true" /> Devolver ao agente
-          </ActionButton>
-          <ActionButton busy={busy === "close"} onClick={() => onAction("close")} tone="danger">
-            <CircleCheck className="size-4" aria-hidden="true" /> Encerrar atendimento
-          </ActionButton>
-        </div>
-        <Composer busy={busy === "reply"} onReply={onReply} />
-      </>
-    );
+    // "Devolver ao agente" and "Encerrar atendimento" are in the header (HeldActions).
+    body = <Composer busy={busy === "reply"} onReply={onReply} />;
   } else {
     const waiting = conversation.state === "waiting_analyst";
     body = (
@@ -103,6 +92,26 @@ export function ConversationActions({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+// The holder's actions, in the conversation's header as in Screen 5.
+export function HeldActions({
+  busy,
+  onAction,
+}: {
+  busy: ConsoleAction | "reply" | null;
+  onAction: (action: ConsoleAction) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <ActionButton busy={busy === "hand-back"} onClick={() => onAction("hand-back")}>
+        <Bot className="size-4" aria-hidden="true" /> Devolver ao agente
+      </ActionButton>
+      <ActionButton busy={busy === "close"} onClick={() => onAction("close")} tone="danger">
+        <CircleCheck className="size-4" aria-hidden="true" /> Encerrar atendimento
+      </ActionButton>
     </div>
   );
 }
