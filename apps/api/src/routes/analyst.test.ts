@@ -342,6 +342,23 @@ describe("POST take-over, the related ticket", () => {
     }
   });
 
+  it("moves a ticket a confirmed draft wrote in the conversation, with no ticket in the handoff", async () => {
+    const { id, rafael } = await waitingConversation();
+    await db.execute(sql`
+      insert into drafts (conversation_id, employee_id, kind, ticket_number, fields, status,
+        result_ticket, created_at, decided_at)
+      values (${id}, 'ana.souza', 'update', 'INC-20311', '{}', 'confirmed', 'INC-20311', now(), now())`);
+    const service = await testTickets();
+    try {
+      await post(path(id, "/take-over"), rafael);
+
+      const tickets = (await get(path(id, "/tickets"), rafael)).body as unknown as ConsoleTickets;
+      expect(tickets.related).toMatchObject({ number: "INC-20311", status: "em_andamento" });
+    } finally {
+      await service.reseed();
+    }
+  });
+
   it("still takes the conversation over when the ticket service is down", async () => {
     const { id, rafael } = await waitingConversation();
     await db.execute(sql`update handoffs set ticket_number = 'INC-20311'`);

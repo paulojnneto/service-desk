@@ -24,7 +24,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { Db } from "../db/connect";
-import { conversations, decisions, handoffs, messages } from "../db/schema";
+import { conversations, decisions, drafts, handoffs, messages } from "../db/schema";
 
 // Every read and write of the stored conversations. Each function takes the employee's
 // id from the session and filters by it, so another person's conversation never leaves
@@ -553,4 +553,27 @@ export async function lastClosedByAnalyst(db: Db, employeeId: string): Promise<L
     by: findPersonById(latest.closedBy)?.name ?? "Um analista",
     at: latest.closedAt.toISOString(),
   };
+}
+
+// The conversation's ticket, for the console: the latest one a handoff named or a confirmed
+// draft wrote (created, updated or reopened) in this conversation.
+export async function conversationTicket(db: Db, conversationId: string): Promise<string | null> {
+  const [handoff] = await db
+    .select({ ticket: handoffs.ticketNumber, at: handoffs.createdAt })
+    .from(handoffs)
+    .where(
+      and(eq(handoffs.conversationId, conversationId), sql`${handoffs.ticketNumber} is not null`),
+    )
+    .orderBy(desc(handoffs.createdAt))
+    .limit(1);
+  const [draft] = await db
+    .select({ ticket: drafts.resultTicket, at: drafts.decidedAt })
+    .from(drafts)
+    .where(and(eq(drafts.conversationId, conversationId), eq(drafts.status, "confirmed")))
+    .orderBy(desc(drafts.decidedAt))
+    .limit(1);
+  const latest = [handoff, draft]
+    .filter((row) => row?.ticket && row.at)
+    .sort((a, b) => b!.at!.getTime() - a!.at!.getTime())[0];
+  return latest?.ticket ?? null;
 }
